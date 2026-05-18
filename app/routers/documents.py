@@ -233,3 +233,106 @@ async def confirm_upload(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update document upload status in database.",
         )
+
+
+@router.post(
+    "/{document_id}/regenerate-upload-url",
+    response_model=PresignedUrlResponse,
+    dependencies=[Depends(rate_limit_dependency)],
+    summary="Regenerate expired S3 pre-signed upload URL",
+    description="Regenerates a fresh AWS S3 pre-signed PUT URL for an existing pending document tracking session.",
+)
+async def regenerate_upload_url(
+    document_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+    db: Annotated[Any, Depends(get_db)],
+):
+    """
+    Looks up an existing pending document, verifies ownership, and returns a new valid pre-signed URL.
+    """
+    user_id = current_user["_id"]
+    user_id_str = str(user_id)
+
+    logger.info(
+        f"Regenerating pre-signed URL for document: {document_id} by user: {user_id_str}"
+    )
+
+    try:
+        doc_obj_id = ObjectId(document_id)
+    except InvalidId:
+        logger.warning(f"Malstructured document ID submitted: '{document_id}'")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Malformed document tracking identifier.",
+        )
+
+    # Retrieve existing document
+    document = await db.documents.find_one({"_id": doc_obj_id})
+    if not document:
+        logger.warning(f"Regenerate upload URL failed: Document {document_id} not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document record not found."
+        )
+
+    # Security check: verify ownership
+    if document["user_id"] != user_id:
+        logger.warning(
+            f"Access violation: User {user_id_str} attempted regeneration on document {document_id} owned by user {str(document['user_id'])}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access forbidden: You do not own this document tracking session.",
+        )
+
+    # Business rule: only allow regeneration for pending uploads
+    if document["status"] == "completed":
+        logger.warning(
+            f"Regeneration rejected: Document {document_id} is already in 'completed' status."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot regenerate upload URL for a completed document. Please initiate a new document request.",
+        )
+
+    # Expiration for pre-signed URL (default: 1 hour)
+    expiration = 3600
+
+    # Generate a fresh S3 Pre-signed PUT URL using the exact original file_key and content_type
+    try:
+        upload_url = s3_client.generate_presigned_url(
+            ClientMethod="put_object",
+            Params={
+                "Bucket": document["bucket"],
+                "Key": document["file_key"],
+                "ContentType": document["content_type"],
+            },
+            ExpiresIn=expiration,
+        )
+    except ClientError as e:
+        logger.exception(f"Failed to regenerate AWS S3 pre-signed URL: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to interface with AWS S3 storage provider.",
+        )
+
+    # Update updated_at timestamp in database
+    try:
+        await db.documents.update_one(
+            {"_id": doc_obj_id},
+            {"$set": {"updated_at": datetime.now(timezone.utc)}},
+        )
+    except Exception as e:
+        # Non-blocking log warning since pre-signed URL calculation succeeded
+        logger.warning(f"Failed to update document updated_at timestamp in database: {e}")
+
+    logger.info(
+        f"Successfully regenerated S3 pre-signed URL for document {document_id} for user {user_id_str}."
+    )
+
+    return PresignedUrlResponse(
+        upload_url=upload_url,
+        file_key=document["file_key"],
+        bucket=document["bucket"],
+        expires_in_seconds=expiration,
+        document_id=document_id,
+    )
