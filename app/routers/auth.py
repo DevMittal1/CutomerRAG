@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from pymongo.errors import DuplicateKeyError
-from bson import ObjectId
 from app.auth import (
     get_current_user,
     hash_password,
@@ -126,3 +126,34 @@ async def get_me(current_user: Annotated[dict, Depends(get_current_user)]):
         email=current_user["email"],
         created_at=current_user["created_at"],
     )
+
+@router.post("/token")
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Annotated[Any, Depends(get_db)] = None,
+):
+    user = await db.users.find_one({
+        "email": form_data.username
+    })
+
+    if not user or not verify_password(
+        form_data.password,
+        user["password_hash"]
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token_data = {
+        "sub": str(user["_id"]),
+        "email": user["email"],
+    }
+
+    access_token = create_access_token(data=token_data)
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+    }

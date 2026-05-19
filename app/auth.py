@@ -15,7 +15,7 @@ logger = logging.getLogger("app.auth")
 
 # Setup OAuth2 Bearer token extraction
 # Specifies the endpoint from which a token should be acquired
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/signin", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
 
 
 def hash_password(password: str) -> str:
