@@ -12,7 +12,7 @@ from app.logging_config import setup_logging, get_logger, request_id_var
 from app.routers.auth import router as auth_router
 from app.routers.documents import router as documents_router
 
-from app.rate_limiter import global_rate_limiter, rate_limit_dependency
+from app.rate_limiter import global_rate_limiter
 
 # Initialize structured console logging
 setup_logging()

@@ -1,8 +1,6 @@
 import contextvars
 import logging
 import sys
-import time
-from typing import Any, Dict
 
 # Context variable to hold the unique request ID for the duration of a request lifecycle
 request_id_var = contextvars.ContextVar("request_id", default="-")
