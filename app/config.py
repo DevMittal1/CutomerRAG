@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     MONGODB_URI: str = Field(default="mongodb://localhost:27017")
     MONGODB_DB_NAME: str = Field(default="rag_prod")
 
+    # Redis Settings
+    REDIS_URI: str = Field(default="redis://localhost:6379")
+
     # JWT Authentication
     JWT_SECRET_KEY: str = Field(default="949f57912bbbc4f7831f24d45a98bf24c5b96677f98d4076f7bb8f1d82121de4")
     JWT_ALGORITHM: str = Field(default="HS256")

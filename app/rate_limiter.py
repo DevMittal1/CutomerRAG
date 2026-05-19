@@ -1,21 +1,17 @@
-import asyncio
 import time
-from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import Tuple
 from fastapi import HTTPException, Request, status
+import redis.asyncio as redis
 from app.config import settings
 
 class SlidingWindowRateLimiter:
     """
-    Thread-safe, asynchronous in-memory sliding window rate limiter.
-    Does not require external dependencies like Redis, keeping the deploy self-contained.
+    Asynchronous Sliding Window Rate Limiter using Redis.
     """
-    def __init__(self, limit: int, window_seconds: int):
+    def __init__(self, limit: int, window_seconds: int, redis_url: str):
         self.limit = limit
         self.window_seconds = window_seconds
-        # Maps client IP to list of request timestamps
-        self.requests: Dict[str, List[float]] = defaultdict(list)
-        self.lock = asyncio.Lock()
+        self.redis_client = redis.from_url(redis_url, decode_responses=True)
 
     async def is_rate_limited(self, client_ip: str) -> Tuple[bool, int, int]:
         """
@@ -29,31 +25,46 @@ class SlidingWindowRateLimiter:
 
         now = time.time()
         cutoff = now - self.window_seconds
+        redis_key = f"rate_limit:{client_ip}"
 
-        async with self.lock:
-            # Prune timestamps older than the sliding window threshold
-            self.requests[client_ip] = [t for t in self.requests[client_ip] if t > cutoff]
+        async with self.redis_client.pipeline(transaction=True) as pipe:
+            # 1. Remove timestamps older than cutoff
+            pipe.zremrangebyscore(redis_key, "-inf", cutoff)
+            # 2. Get current request count in the window
+            pipe.zcard(redis_key)
+            results = await pipe.execute()
+        
+        current_count = results[1]
+        
+        if current_count < self.limit:
+            # Allowed: add current timestamp and update expiry
+            async with self.redis_client.pipeline(transaction=True) as pipe:
+                pipe.zadd(redis_key, {str(now): now})
+                pipe.expire(redis_key, self.window_seconds)
+                await pipe.execute()
             
-            history = self.requests[client_ip]
-            current_count = len(history)
-            
-            if current_count < self.limit:
-                # Request is allowed; record the current timestamp
-                history.append(now)
-                remaining = self.limit - (current_count + 1)
-                return False, remaining, 0
-            else:
-                # Request is rate limited; calculate time to wait for the oldest timestamp to fall out
-                oldest_timestamp = history[0]
+            remaining = self.limit - (current_count + 1)
+            return False, remaining, 0
+        else:
+            # Rate limited: find the oldest timestamp to calculate retry_after
+            oldest_element = await self.redis_client.zrange(redis_key, 0, 0, withscores=True)
+            if oldest_element:
+                oldest_timestamp = oldest_element[0][1]
                 retry_after = int(self.window_seconds - (now - oldest_timestamp))
-                # Ensure we wait at least 1 second
                 retry_after = max(retry_after, 1)
-                return True, 0, retry_after
+            else:
+                retry_after = 1
+            return True, 0, retry_after
+
+    async def close(self):
+        await self.redis_client.aclose()
+
 
 # Global rate limiter initialized with settings configurations
 global_rate_limiter = SlidingWindowRateLimiter(
     limit=settings.RATE_LIMIT_REQUESTS,
-    window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS
+    window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
+    redis_url=settings.REDIS_URI
 )
 
 async def rate_limit_dependency(request: Request) -> None:
