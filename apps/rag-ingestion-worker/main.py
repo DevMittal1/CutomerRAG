@@ -111,11 +111,10 @@ class ProductionRAGWorker:
                         aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
                     ) as s3:
                         obj = await s3.get_object(Bucket=bucket, Key=key)
-                        data = await obj['Body'].read()
-                        content = data.decode('utf-8', errors='ignore')
+                        content_bytes = await obj['Body'].read()
 
-                    # 3. Process (Chunking, etc.)
-                    await self.processor.run(bucket, key, message_id, content)
+                    # 3. Process (Submission to Landing AI)
+                    await self.processor.run(bucket, key, message_id, content_bytes)
 
                 # 4. Successful processing: Delete
                 await sqs.delete_message(

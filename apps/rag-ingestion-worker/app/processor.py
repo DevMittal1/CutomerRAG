@@ -1,11 +1,11 @@
 import asyncio
+import httpx
 import hashlib
 from datetime import datetime, timezone
 from typing import Optional
 from pymongo import AsyncMongoClient
 from .config import settings
 from .utils.logging import get_worker_logger
-from .utils.chunking import perform_text_chunking
 
 logger = get_worker_logger("worker.processor")
 
@@ -27,7 +27,7 @@ class IngestionProcessor:
         Ensures we don't process the same SQS message or file key if already completed.
         """
         # Check by SQS Message ID or a successfully ingested file_key
-        existing = await self.db.documents.find_one({
+        existing = await self.db[settings.COLL_DOCUMENTS].find_one({
             "$or": [
                 {"last_sqs_message_id": message_id},
                 {"file_key": file_key, "status": "completed"}
@@ -35,17 +35,46 @@ class IngestionProcessor:
         })
         return existing is not None
 
-    async def run(self, bucket: str, key: str, message_id: str, content: str):
+    async def submit_to_landing_ai(self, file_content: bytes, filename: str) -> str:
         """
-        Processes document content and updates state.
+        Uploads file to Landing AI and returns job_id.
+        """
+        if not settings.LANDING_AI_API_KEY:
+            raise ValueError("LANDING_AI_API_KEY is not set")
+
+        headers = {
+            "Authorization": f"Bearer {settings.LANDING_AI_API_KEY}"
+        }
+        
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            files = {
+                "document": (filename, file_content)
+            }
+            data = {
+                "model": "dpt-2-latest"
+            }
+            
+            response = await client.post(
+                f"{settings.LANDING_AI_BASE_URL}/parse/jobs",
+                headers=headers,
+                files=files,
+                data=data
+            )
+            response.raise_for_status()
+            result = response.json()
+            return result["job_id"]
+
+    async def run(self, bucket: str, key: str, message_id: str, content_bytes: bytes):
+        """
+        Submits document to Landing AI and updates state to pending.
         """
         log_extra = {"bucket": bucket, "key": key, "message_id": message_id}
-        logger.info(f"Processing document content", extra=log_extra)
+        logger.info(f"Submitting document to Landing AI", extra=log_extra)
         
         doc_filter = {"file_key": key}
         
         # Initial update
-        await self.db.documents.update_one(
+        await self.db[settings.COLL_DOCUMENTS].update_one(
             doc_filter,
             {
                 "$set": {
@@ -56,31 +85,26 @@ class IngestionProcessor:
             },
             upsert=True
         )
-
         try:
-            # CPU intensive chunking (could be offloaded to threadpool if strictly necessary)
-            chunks = perform_text_chunking(
-                content, 
-                chunk_size=settings.CHUNK_SIZE, 
-                chunk_overlap=settings.CHUNK_OVERLAP
-            )
+            # 1. Submit to Landing AI
+            job_id = await self.submit_to_landing_ai(content_bytes, key)
             
-            # Atomic finalization
-            await self.db.documents.update_one(
+            # 2. Update state to landing_ai_pending
+            await self.db[settings.COLL_DOCUMENTS].update_one(
                 doc_filter,
                 {
                     "$set": {
-                        "status": "completed", 
-                        "chunk_count": len(chunks),
+                        "status": "landing_ai_pending", 
+                        "landing_ai_job_id": job_id,
                         "updated_at": datetime.now(timezone.utc)
                     }
                 }
             )
-            logger.info("Ingestion completed successfully", extra=log_extra)
+            logger.info(f"Document submitted to Landing AI. JobID: {job_id}", extra=log_extra)
 
         except Exception as e:
-            logger.exception("Ingestion failed", extra=log_extra)
-            await self.db.documents.update_one(
+            logger.exception("Landing AI submission failed", extra=log_extra)
+            await self.db[settings.COLL_DOCUMENTS].update_one(
                 doc_filter,
                 {
                     "$set": {

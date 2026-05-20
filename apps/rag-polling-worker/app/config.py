@@ -11,17 +11,6 @@ class WorkerSettings(BaseSettings):
     MONGODB_URI: str = Field(default="mongodb://localhost:27017")
     MONGODB_DB_NAME: str = Field(default="rag_prod")
 
-    # AWS Configuration
-    AWS_ACCESS_KEY_ID: str = Field(default="mock_access_key_id")
-    AWS_SECRET_ACCESS_KEY: str = Field(default="mock_secret_access_key")
-    AWS_REGION: str = Field(default="us-east-1")
-    S3_BUCKET_NAME: str = Field(default="rag-prod-documents-bucket")
-    
-    # SQS Configuration
-    AWS_SQS_QUEUE_URL: str = Field(default="https://sqs.us-east-1.amazonaws.com/123456789012/rag-ingestion-queue")
-    AWS_SQS_WAIT_TIME_SECONDS: int = Field(default=20)
-    AWS_SQS_VISIBILITY_TIMEOUT: int = Field(default=30)
-
     # RAG Tuning
     CHUNK_SIZE: int = Field(default=512)
     CHUNK_OVERLAP: int = Field(default=50)
