@@ -10,6 +10,9 @@ class WorkerSettings(BaseSettings):
     MONGODB_URI: str = Field(default="mongodb://localhost:27017")
     MONGODB_DB_NAME: str = Field(default="rag_prod")
 
+    # Redis Connection
+    REDIS_URI: str = Field(default="redis://localhost:6379")
+
     # AWS Configuration
     AWS_ACCESS_KEY_ID: str = Field(default="mock_access_key_id")
     AWS_SECRET_ACCESS_KEY: str = Field(default="mock_secret_access_key")
