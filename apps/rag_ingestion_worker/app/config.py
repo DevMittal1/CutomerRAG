@@ -31,6 +31,13 @@ class WorkerSettings(BaseSettings):
     # Worker Scaling
     MAX_CONCURRENT_TASKS: int = Field(default=5)
 
+    # Collection Names
+    COLL_DOCUMENTS: str = Field(default="documents")
+
+    # Landing AI Configuration
+    LANDING_AI_API_KEY: str = Field(default="")
+    LANDING_AI_BASE_URL: str = Field(default="https://api.va.landing.ai/v1/ade")
+
     model_config = SettingsConfigDict(
         env_file=".env",  # Traverse up to the root .env
         env_file_encoding="utf-8",

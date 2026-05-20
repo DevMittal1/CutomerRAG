@@ -1,10 +1,10 @@
 import asyncio
+import httpx
 from datetime import datetime, timezone
 from typing import Optional
 from pymongo import AsyncMongoClient
 from .config import settings
 from .utils.logging import get_worker_logger
-from .utils.chunking import perform_text_chunking
 
 logger = get_worker_logger("worker.processor")
 
@@ -258,126 +258,141 @@ class IngestionProcessor:
         Ensures we don't process the same SQS message or file key if already completed.
         """
         # Check by SQS Message ID or a successfully ingested file_key
-        existing = await self.db.documents.find_one(
-            {
-                "$or": [
-                    {"last_sqs_message_id": message_id},
-                    {"file_key": file_key, "status": "completed"},
-                ]
-            }
-        )
+        existing = await self.db[settings.COLL_DOCUMENTS].find_one({
+            "$or": [
+                {"last_sqs_message_id": message_id},
+                {"file_key": file_key, "status": "completed"}
+            ]
+        })
         return existing is not None
+
+    def _should_retry(self, exception: Exception, attempt: int, max_retries: int) -> bool:
+        """Determines if the exception warrants a retry attempt."""
+        if attempt >= max_retries:
+            return False
+
+        if isinstance(exception, httpx.HTTPStatusError):
+            status = exception.response.status_code
+            return status == 429 or status >= 500
+
+        return isinstance(exception, (httpx.RequestError, httpx.TimeoutException))
+
+    def _get_retry_delay(self, attempt: int, base_delay: float, max_delay: float) -> float:
+        """Calculates exponential backoff with full jitter."""
+        import random
+        delay = min(max_delay, base_delay * (2 ** (attempt - 1)))
+        return delay * random.uniform(0.5, 1.5)
+
+    async def _attempt_submission(
+        self, client: httpx.AsyncClient, headers: dict, files: dict, data: dict
+    ) -> str:
+        """Executes a single HTTP request attempt to Landing AI."""
+        response = await client.post(
+            f"{settings.LANDING_AI_BASE_URL}/parse/jobs",
+            headers=headers,
+            files=files,
+            data=data
+        )
+        response.raise_for_status()
+        return response.json()["job_id"]
+
+    async def submit_to_landing_ai(self, file_content: bytes, filename: str) -> str:
+        """
+        Uploads file to Landing AI and returns job_id.
+        Includes a robust retry mechanism with exponential backoff and jitter for transient errors.
+        """
+        if not settings.LANDING_AI_API_KEY:
+            raise ValueError("LANDING_AI_API_KEY is not set")
+
+        headers = {
+            "Authorization": f"Bearer {settings.LANDING_AI_API_KEY}"
+        }
+        files = {
+            "document": (filename, file_content)
+        }
+        data = {
+            "model": "dpt-2-latest"
+        }
+
+        max_retries = 5
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            for attempt in range(1, max_retries + 1):
+                try:
+                    logger.info(f"Submitting to Landing AI (attempt {attempt}/{max_retries})")
+                    return await self._attempt_submission(client, headers, files, data)
+                except Exception as e:
+                    if not self._should_retry(e, attempt, max_retries):
+                        raise
+
+                    delay = self._get_retry_delay(attempt, 1.0, 10.0)
+                    logger.warning(
+                        f"Landing AI attempt {attempt} failed ({e}). Retrying in {delay:.2f}s..."
+                    )
+                    await asyncio.sleep(delay)
+
+        raise RuntimeError("Landing AI submission failed after all retries.")
 
     async def run(
         self,
         bucket: str,
         key: str,
         message_id: str,
-        data: bytes,
-        s3_content_type: Optional[str] = None,
+        content_bytes: bytes,
+        _s3_content_type: Optional[str] = None,
     ):
         """
-        Processes document content and updates state.
+        Submits document to Landing AI and updates state to pending.
         """
         log_extra = {"bucket": bucket, "key": key, "message_id": message_id}
-        logger.info("Processing document content", extra=log_extra)
+        logger.info("Submitting document to Landing AI", extra=log_extra)
 
         doc_filter = {"file_key": key}
 
-        # Stage 1: Classify file
-        classification = classify_file(data, s3_content_type, filename=key)
-        logger.info(f"File classification complete: {classification}", extra=log_extra)
-
-        # Initial update with classification metadata
-        await self.db.documents.update_one(
+        # Initial update
+        await self.db[settings.COLL_DOCUMENTS].update_one(
             doc_filter,
             {
                 "$set": {
                     "status": "processing",
                     "last_sqs_message_id": message_id,
-                    "mime_type": classification["mime_type"],
-                    "extension": classification["extension"],
-                    "parser_route": classification["route"],
-                    "updated_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc)
                 }
             },
-            upsert=True,
+            upsert=True
         )
-
         try:
-            # Stage 2 & 3: Routing and Normalization
-            route = classification["route"]
-            metadata = {
-                "bucket": bucket,
-                "key": key,
-                "message_id": message_id,
-                "mime_type": classification["mime_type"],
-                "extension": classification["extension"],
-            }
+            # 1. Submit to Landing AI
+            job_id = await self.submit_to_landing_ai(content_bytes, key)
 
-            if route == "pdf":
-                norm_doc = parse_pdf(data, metadata)
-            elif route == "json":
-                norm_doc = parse_json(data, metadata)
-            elif route == "csv":
-                norm_doc = parse_csv(data, metadata)
-            elif route == "docx":
-                norm_doc = parse_docx(data, metadata)
-            elif route == "xlsx":
-                norm_doc = parse_xlsx(data, metadata)
-            elif route == "pptx":
-                norm_doc = parse_pptx(data, metadata)
-            elif route == "image":
-                norm_doc = parse_image(data, metadata)
-            elif route == "text":
-                norm_doc = parse_text(data, metadata)
-            else:
-                norm_doc = parse_fallback(data, metadata)
-
-            logger.info(
-                f"Normalization complete (Text size: {len(norm_doc.text)} chars)",
-                extra=log_extra,
-            )
-
-            # Stage 4: Perform chunking on normalized text
-            chunks = perform_text_chunking(
-                norm_doc.text,
-                chunk_size=settings.CHUNK_SIZE,
-                chunk_overlap=settings.CHUNK_OVERLAP,
-            )
-
-            # Atomic finalization
-            await self.db.documents.update_one(
+            # 2. Update state to landing_ai_pending
+            await self.db[settings.COLL_DOCUMENTS].update_one(
                 doc_filter,
                 {
                     "$set": {
-                        "status": "completed",
-                        "chunk_count": len(chunks),
-                        "scanned_pdf": norm_doc.metadata.get("scanned_pdf", False),
-                        "updated_at": datetime.now(timezone.utc),
+                        "status": "landing_ai_pending",
+                        "landing_ai_job_id": job_id,
+                        "updated_at": datetime.now(timezone.utc)
                     }
-                },
+                }
             )
-            logger.info("Ingestion completed successfully", extra=log_extra)
+            logger.info(f"Document submitted to Landing AI. JobID: {job_id}", extra=log_extra)
 
         except Exception as e:
-            logger.exception("Ingestion failed", extra=log_extra)
-            await self.db.documents.update_one(
+            logger.exception("Landing AI submission failed", extra=log_extra)
+            await self.db[settings.COLL_DOCUMENTS].update_one(
                 doc_filter,
                 {
                     "$set": {
                         "status": "failed",
                         "error": str(e),
-                        "updated_at": datetime.now(timezone.utc),
+                        "updated_at": datetime.now(timezone.utc)
                     }
-                },
+                }
             )
             raise
 
 
-async def heartbeat_extender(
-    sqs_client, queue_url: str, receipt_handle: str, interval: int = 15
-):
+async def heartbeat_extender(sqs_client, queue_url: str, receipt_handle: str, interval: int = 15):
     """
     Background loop to keep SQS message hidden while processing is active.
     Prevents other workers from picking up the same message.
@@ -389,7 +404,7 @@ async def heartbeat_extender(
             await sqs_client.change_message_visibility(
                 QueueUrl=queue_url,
                 ReceiptHandle=receipt_handle,
-                VisibilityTimeout=30,  # Extend for another 30s
+                VisibilityTimeout=30  # Extend for another 30s
             )
             logger.info("Heartbeat: extended visibility timeout")
     except asyncio.CancelledError:

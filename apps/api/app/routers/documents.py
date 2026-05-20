@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from typing import List, Annotated, Any
-import boto3
+import aioboto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,15 +18,8 @@ logger = get_logger("app.routers.documents")
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
-# Configure boto3 S3 Client (thread-safe, lightweight signature generation)
-# Signature Version 4 is enforced for security
-s3_client = boto3.client(
-    "s3",
-    aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-    aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-    region_name=settings.AWS_REGION,
-    config=Config(signature_version="s3v4"),
-)
+# Configure aioboto3 Session (thread-safe, non-blocking IO client)
+session = aioboto3.Session()
 
 
 @router.post(
@@ -59,17 +52,24 @@ async def generate_upload_url(
     # Expiration for pre-signed URL (default: 1 hour)
     expiration = 3600
 
-    # Generate S3 Pre-signed PUT URL
+    # Generate S3 Pre-signed PUT URL asynchronously
     try:
-        upload_url = s3_client.generate_presigned_url(
-            ClientMethod="put_object",
-            Params={
-                "Bucket": settings.S3_BUCKET_NAME,
-                "Key": file_key,
-                "ContentType": payload.content_type,
-            },
-            ExpiresIn=expiration,
-        )
+        async with session.client(
+            "s3",
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+            region_name=settings.AWS_REGION,
+            config=Config(signature_version="s3v4"),
+        ) as s3_client:
+            upload_url = await s3_client.generate_presigned_url(
+                ClientMethod="put_object",
+                Params={
+                    "Bucket": settings.S3_BUCKET_NAME,
+                    "Key": file_key,
+                    "ContentType": payload.content_type,
+                },
+                ExpiresIn=expiration,
+            )
     except ClientError as e:
         logger.exception(f"Failed to generate AWS S3 pre-signed URL: {e}")
         raise HTTPException(
@@ -297,17 +297,24 @@ async def regenerate_upload_url(
     # Expiration for pre-signed URL (default: 1 hour)
     expiration = 3600
 
-    # Generate a fresh S3 Pre-signed PUT URL using the exact original file_key and content_type
+    # Generate a fresh S3 Pre-signed PUT URL using the exact original file_key and content_type asynchronously
     try:
-        upload_url = s3_client.generate_presigned_url(
-            ClientMethod="put_object",
-            Params={
-                "Bucket": document["bucket"],
-                "Key": document["file_key"],
-                "ContentType": document["content_type"],
-            },
-            ExpiresIn=expiration,
-        )
+        async with session.client(
+            "s3",
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+            region_name=settings.AWS_REGION,
+            config=Config(signature_version="s3v4"),
+        ) as s3_client:
+            upload_url = await s3_client.generate_presigned_url(
+                ClientMethod="put_object",
+                Params={
+                    "Bucket": document["bucket"],
+                    "Key": document["file_key"],
+                    "ContentType": document["content_type"],
+                },
+                ExpiresIn=expiration,
+            )
     except ClientError as e:
         logger.exception(f"Failed to regenerate AWS S3 pre-signed URL: {e}")
         raise HTTPException(
