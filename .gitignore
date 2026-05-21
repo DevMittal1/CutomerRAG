@@ -12,7 +12,6 @@ wheels/
 .python-version
 API_DOCUMENTATION.md
 PRODUCTION_REQUIREMENTS.md
-README.md
 requirements.txt
 test_api.py
 uv.lock
