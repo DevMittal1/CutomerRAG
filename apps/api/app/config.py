@@ -41,6 +41,35 @@ class Settings(BaseSettings):
     LANDING_AI_API_KEY: str = Field(default="")
     LANDING_AI_BASE_URL: str = Field(default="https://api.va.landing.ai/v1/ade")
 
+    # Async chat + RAG configuration
+    GEMINI_API_KEY: str = Field(default="")
+    GEMINI_CHAT_MODEL: str = Field(default="gemini-3.5-flash")
+    RAG_QUERY_EMBEDDING_MODEL: str = Field(default="text-embedding-004")
+    RAG_QUERY_EMBEDDING_OUTPUT_DIMENSIONALITY: int = Field(default=512)
+    COHERE_API_KEY: str = Field(default="")
+    COHERE_RERANK_MODEL: str = Field(default="rerank-v3.5")
+    QDRANT_URL: str = Field(default="http://localhost:6333")
+    QDRANT_API_KEY: str | None = Field(default=None)
+    QDRANT_COLLECTION_NAME: str = Field(default="document_chunks")
+    QDRANT_VECTOR_SIZE: int = Field(default=512)
+    QDRANT_DISTANCE: str = Field(default="Cosine")
+    QDRANT_DENSE_VECTOR_NAME: str | None = Field(default=None)
+    QDRANT_SPARSE_VECTOR_NAME: str | None = Field(default=None)
+    QDRANT_PREFER_GRPC: bool = Field(default=True)
+    RAG_ENABLE_SPARSE_RETRIEVAL: bool = Field(default=True)
+    RAG_SPARSE_MODEL_NAME: str = Field(default="prithvida/Splade_PP_en_v1")
+    RAG_RETRIEVE_LIMIT_DENSE: int = Field(default=50)
+    RAG_RETRIEVE_LIMIT_SPARSE: int = Field(default=50)
+    RAG_RETRIEVE_LIMIT_FINAL: int = Field(default=50)
+    RAG_RERANK_TOP_N: int = Field(default=8)
+    RAG_MAX_CONTEXT_CHUNKS: int = Field(default=6)
+    RAG_MAX_FILTER_DOCUMENT_IDS: int = Field(default=1000)
+    RAG_GENERATION_MAX_OUTPUT_TOKENS: int = Field(default=2048)
+    RAG_GENERATION_TEMPERATURE: float = Field(default=0.2)
+    RAG_REQUEST_TIMEOUT_SECONDS: float = Field(default=45.0)
+    RAG_QDRANT_TIMEOUT_SECONDS: int = Field(default=10)
+    RAG_REQUIRE_COHERE_RERANK: bool = Field(default=False)
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -70,5 +99,9 @@ class Settings(BaseSettings):
                 pass
             return [ip.strip() for ip in self.RATE_LIMIT_BYPASS_IPS.split(",") if ip.strip()]
         return self.RATE_LIMIT_BYPASS_IPS
+
+    @property
+    def effective_gemini_api_key(self) -> str:
+        return self.GEMINI_API_KEY or self.GOOGLE_API_KEY
 
 settings = Settings()

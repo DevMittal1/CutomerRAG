@@ -10,7 +10,9 @@ from app.config import settings
 from app.db import connect_to_mongo, close_mongo_connection, get_db
 from app.logging_config import setup_logging, get_logger, request_id_var
 from app.routers.auth import router as auth_router
+from app.routers.chat import router as chat_router
 from app.routers.documents import router as documents_router
+from app.services.rag_chat import rag_chat_service
 
 from app.rate_limiter import global_rate_limiter
 
@@ -35,6 +37,7 @@ async def lifespan(app: FastAPI):
     yield
     # Terminate connection pool gracefully
     logger.info("Initiating application shutdown sequence...")
+    await rag_chat_service.close()
     await close_mongo_connection()
 
 
@@ -247,3 +250,4 @@ async def health_check():
 # Aggregate API router endpoints under /api/v1 prefix
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(documents_router, prefix="/api/v1")
+app.include_router(chat_router, prefix="/api/v1")
