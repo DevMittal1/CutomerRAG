@@ -127,7 +127,7 @@ class DocumentResponse(BaseModel):
     filename: str
     file_key: str
     bucket: str
-    status: str = Field(..., description="State of the file upload ('pending', 'completed', 'failed')")
+    status: str = Field(..., description="Lifecycle state of the document as it moves through upload and processing")
     content_type: str
     file_size_bytes: int
     created_at: datetime

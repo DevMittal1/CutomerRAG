@@ -1,0 +1,15 @@
+[project]
+name = "rag-embedding-sync-worker"
+version = "0.1.0"
+description = "Dedicated Gemini embedding batch poller and Qdrant sync worker"
+requires-python = ">=3.13"
+dependencies = [
+    "google-genai==2.5.0",
+    "pymongo==4.17.0",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.11.0",
+    "qdrant-client==1.18.0",
+]
+
+[tool.uv]
+managed = true

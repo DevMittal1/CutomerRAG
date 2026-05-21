@@ -7,6 +7,7 @@ from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, status
 from bson import ObjectId
 from bson.errors import InvalidId
+from pymongo import ReturnDocument
 from app.auth import get_current_user
 from app.config import settings
 from app.db import get_db
@@ -88,6 +89,7 @@ async def generate_upload_url(
         "user_id": user_id,
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
+        "use_external_parser": payload.use_external_parser,
     }
 
     try:
@@ -146,6 +148,7 @@ async def list_documents(
                     file_size_bytes=doc["file_size_bytes"],
                     created_at=doc["created_at"],
                     updated_at=doc["updated_at"],
+                    use_external_parser=doc.get("use_external_parser", False),
                 )
             )
         return response_list
@@ -209,7 +212,7 @@ async def confirm_upload(
         update_result = await db.documents.find_one_and_update(
             {"_id": doc_obj_id, "status": "pending"},
             {"$set": {"status": "uploaded", "updated_at": datetime.now(timezone.utc)}},
-            return_document=True,
+            return_document=ReturnDocument.AFTER,
         )
         if update_result is None:
             update_result = await db.documents.find_one({"_id": doc_obj_id})

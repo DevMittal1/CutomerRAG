@@ -78,6 +78,9 @@ async def init_db_indexes() -> None:
 
         # Documents Collection: Optimize listing documents per user sorted by date
         await db.documents.create_index([("user_id", 1), ("created_at", -1)])
+        await db.documents.create_index("file_key", unique=True)
+        await db.documents.create_index([("status", 1), ("updated_at", 1)])
+        await db.chunks.create_index([("document_id", 1), ("chunk_index", 1)], unique=True)
 
         logger.info("Database indexes initialized successfully.")
     except Exception as e:
