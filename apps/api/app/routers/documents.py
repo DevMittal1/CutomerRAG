@@ -161,7 +161,7 @@ async def list_documents(
     "/{document_id}/confirm",
     response_model=DocumentResponse,
     summary="Confirm document upload success",
-    description="Updates the document status to 'completed' once upload to S3 is finished.",
+    description="Updates the document status once upload to S3 is finished.",
 )
 async def confirm_upload(
     document_id: str,
@@ -169,7 +169,7 @@ async def confirm_upload(
     db: Annotated[Any, Depends(get_db)],
 ):
     """
-    Allows clients to signal upload completion, transitioning state from pending -> completed.
+    Allows clients to signal upload completion, transitioning state from pending -> uploaded.
     Verifies that the target document belongs to the authenticated requester.
     """
     user_id = current_user["_id"]
@@ -204,16 +204,23 @@ async def confirm_upload(
             detail="Access forbidden: You do not own this document tracking session.",
         )
 
-    # Perform atomic update to set status to 'completed'
+    # Record upload success without implying parsing/chunking has finished.
     try:
         update_result = await db.documents.find_one_and_update(
-            {"_id": doc_obj_id},
-            {"$set": {"status": "completed", "updated_at": datetime.now(timezone.utc)}},
+            {"_id": doc_obj_id, "status": "pending"},
+            {"$set": {"status": "uploaded", "updated_at": datetime.now(timezone.utc)}},
             return_document=True,
         )
+        if update_result is None:
+            update_result = await db.documents.find_one({"_id": doc_obj_id})
+            if update_result is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Document record not found.",
+                )
 
         logger.info(
-            f"Successfully finalized upload for document {document_id}. Status set to 'completed'."
+            f"Successfully finalized upload for document {document_id}. Status recorded as '{update_result['status']}'."
         )
 
         return DocumentResponse(
@@ -226,6 +233,7 @@ async def confirm_upload(
             file_size_bytes=update_result["file_size_bytes"],
             created_at=update_result["created_at"],
             updated_at=update_result["updated_at"],
+            use_external_parser=update_result.get("use_external_parser", False),
         )
     except Exception as e:
         logger.exception(f"Unexpected database exception during document confirm: {e}")
