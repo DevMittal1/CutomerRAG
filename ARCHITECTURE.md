@@ -53,6 +53,15 @@ Gemini Batch Embeddings
   |
   v
 Qdrant
+  |
+  v
+RAG Chat API
+  |
+  v
+MongoDB rag_evaluation_traces
+  |
+  v
+RAGAS Evaluation Worker
 ```
 
 ## 3. Repository Service Map
@@ -143,6 +152,21 @@ Main files:
 - [apps/embedding_sync_worker/main.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/embedding_sync_worker/main.py)
 - [apps/embedding_sync_worker/app/poller.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/embedding_sync_worker/app/poller.py)
 - [apps/embedding_sync_worker/app/config.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/embedding_sync_worker/app/config.py)
+
+### `apps/ragas_eval_worker`
+
+Dedicated offline evaluator for retrieval traces. Responsibilities:
+
+- lease pending evaluation traces from MongoDB
+- run RAGAS metrics outside the request path
+- compare `before_rerank` and `after_rerank` retrieval variants
+- write scores and failures back to MongoDB
+
+Main files:
+
+- [apps/ragas_eval_worker/main.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/ragas_eval_worker/main.py)
+- [apps/ragas_eval_worker/app/poller.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/ragas_eval_worker/app/poller.py)
+- [apps/ragas_eval_worker/app/config.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/ragas_eval_worker/app/config.py)
 
 ## 4. End-to-End Request And Processing Flow
 

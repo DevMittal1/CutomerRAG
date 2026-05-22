@@ -1,0 +1,15 @@
+[project]
+name = "ragas-eval-worker"
+version = "0.1.0"
+description = "Dedicated offline RAGAS evaluation worker for CustomerRAG traces"
+requires-python = ">=3.13"
+dependencies = [
+    "google-genai==2.5.0",
+    "pymongo==4.17.0",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.11.0",
+    "ragas>=0.4.0,<0.5.0",
+]
+
+[tool.uv]
+managed = true

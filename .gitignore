@@ -16,3 +16,4 @@ requirements.txt
 test_api.py
 uv.lock
 docs/
+.codex

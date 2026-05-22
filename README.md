@@ -39,6 +39,7 @@ High-level flow:
 6. Chunks are stored in MongoDB.
 7. Gemini embedding batch jobs are submitted.
 8. Embedding sync worker polls Gemini and upserts vectors into Qdrant.
+9. Chat requests can emit Mongo-backed RAG evaluation traces for offline RAGAS scoring.
 
 ## Services
 
@@ -86,6 +87,14 @@ Gemini embedding poller that:
 - maps embeddings back to chunks
 - upserts vectors into Qdrant
 
+### `apps/ragas_eval_worker`
+
+Offline RAGAS evaluator that:
+
+- claims pending chat traces from MongoDB
+- evaluates `before_rerank` and `after_rerank` trace variants separately
+- stores metric results back into MongoDB without slowing the live chat stream
+
 ## Core Infrastructure
 
 - MongoDB for users, document state, and chunks
@@ -128,6 +137,7 @@ Each app has its own `pyproject.toml`, and the workers use environment-based set
 - AWS credentials and S3/SQS setup
 - Qdrant
 - Gemini API key
+- optional RAGAS worker with Gemini API key for offline evaluation
 - optional Landing AI API key for external parsing
 
 ## API Highlights
