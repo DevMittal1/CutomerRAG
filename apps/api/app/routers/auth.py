@@ -127,10 +127,25 @@ async def get_me(current_user: Annotated[dict, Depends(get_current_user)]):
         created_at=current_user["created_at"],
     )
 
-@router.post("/token")
+@router.post(
+    "/token",
+    response_model=Token,
+    summary="OAuth2 compatible token login",
+    description="Authenticates credentials using standard OAuth2 form-data and returns a secure JWT access token.",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "description": "Incorrect email or password",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Incorrect email or password"}
+                }
+            }
+        }
+    }
+)
 async def login_for_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Annotated[Any, Depends(get_db)] = None,
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: Annotated[Any, Depends(get_db)],
 ):
     user = await db.users.find_one({
         "email": form_data.username
@@ -141,7 +156,7 @@ async def login_for_access_token(
         user["password_hash"]
     ):
         raise HTTPException(
-            status_code=401,
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
@@ -153,7 +168,8 @@ async def login_for_access_token(
 
     access_token = create_access_token(data=token_data)
 
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-    }
+    return Token(
+        access_token=access_token,
+        token_type="bearer",
+        expires_in_seconds=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
