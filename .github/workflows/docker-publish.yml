@@ -106,7 +106,9 @@ jobs:
           chmod 600 "$HOME/.kube/config"
 
       - name: Patch image tags and apply
-        if: secrets.KUBE_CONFIG_DATA != ''
+        if: env.KUBE_CONFIG_DATA != ''
+        env:
+          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
         run: |
           TAG="${{ steps.tag.outputs.value }}"
           RAW_OWNER="${{ github.repository_owner }}"
@@ -123,5 +125,7 @@ jobs:
           kubectl apply -k .
 
       - name: Skip deploy (no cluster secret)
-        if: secrets.KUBE_CONFIG_DATA == ''
+        if: env.KUBE_CONFIG_DATA == ''
+        env:
+          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
         run: echo "KUBE_CONFIG_DATA not set — images published to GHCR only."
