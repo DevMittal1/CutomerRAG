@@ -1,56 +1,100 @@
 version: '3.8'
 
 services:
-  mongodb:
-    image: mongo:6.0
-    container_name: cutomerrag-mongodb
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      args:
+        - APP=api
+    container_name: cutomerrag-api
     restart: unless-stopped
     ports:
-      - "27017:27017"
-    environment:
-      MONGO_INITDB_DATABASE: rag_prod
-    volumes:
-      - mongodb_data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+      - "8000:8000"
+    env_file:
+      - apps/.env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  redis:
-    image: redis:7.2-alpine
-    container_name: cutomerrag-redis
+  s3-ingestion:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      args:
+        - APP=s3_ingestion
+    container_name: cutomerrag-s3-ingestion
     restart: unless-stopped
-    ports:
-      - "6379:6379"
-    command: redis-server --save 60 1 --loglevel warning
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+    env_file:
+      - apps/.env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  qdrant:
-    image: qdrant/qdrant:v1.9.2
-    container_name: cutomerrag-qdrant
+  local-chunk-worker:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      args:
+        - APP=local_chunk_worker
+    container_name: cutomerrag-local-chunk-worker
     restart: unless-stopped
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    volumes:
-      - qdrant_data:/qdrant/storage
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+    env_file:
+      - apps/.env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-volumes:
-  mongodb_data:
-    driver: local
-  redis_data:
-    driver: local
-  qdrant_data:
-    driver: local
+  external-chunk-worker:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      args:
+        - APP=external_chunk_worker
+    container_name: cutomerrag-external-chunk-worker
+    restart: unless-stopped
+    env_file:
+      - apps/.env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  embedding-sync-worker:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      args:
+        - APP=embedding_sync_worker
+    container_name: cutomerrag-embedding-sync-worker
+    restart: unless-stopped
+    env_file:
+      - apps/.env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  ragas-eval-worker:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      args:
+        - APP=ragas_eval_worker
+    container_name: cutomerrag-ragas-eval-worker
+    restart: unless-stopped
+    env_file:
+      - apps/.env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
