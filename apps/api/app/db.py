@@ -81,6 +81,16 @@ async def init_db_indexes() -> None:
         await db.documents.create_index("file_key", unique=True)
         await db.documents.create_index([("status", 1), ("updated_at", 1)])
         await db.chunks.create_index([("document_id", 1), ("chunk_index", 1)], unique=True)
+        await db[settings.RAG_EVAL_TRACE_COLLECTION].create_index(
+            [("eval_status", 1), ("lease_expires_at", 1), ("created_at", 1)]
+        )
+        await db[settings.RAG_EVAL_TRACE_COLLECTION].create_index(
+            [("trace_group_id", 1), ("trace_type", 1)],
+            unique=True,
+        )
+        await db[settings.RAG_EVAL_TRACE_COLLECTION].create_index(
+            [("user_id", 1), ("created_at", -1)]
+        )
 
         logger.info("Database indexes initialized successfully.")
     except Exception as e:

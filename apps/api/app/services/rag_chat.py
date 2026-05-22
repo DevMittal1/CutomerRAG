@@ -4,13 +4,16 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Awaitable, Callable, Sequence
+from uuid import uuid4
 
 from bson import ObjectId
 from bson.errors import InvalidId
+from pymongo import UpdateOne
 from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.config import settings
 from app.logging_config import get_logger
+from app.logging_config import request_id_var
 from app.schemas import ChatStreamRequest
 
 logger = get_logger("app.services.rag_chat")
@@ -52,6 +55,16 @@ class RetrievedChunk:
     text: str
 
 
+@dataclass(slots=True)
+class RetrievalResult:
+    query: str
+    context: str
+    chunks: list[RetrievedChunk]
+    before_rerank_chunks: list[RetrievedChunk]
+    after_rerank_chunks: list[RetrievedChunk]
+    retrieval_status: str
+
+
 class ConfigurationError(RuntimeError):
     pass
 
@@ -63,8 +76,11 @@ class ProductionRAGChatService:
         self._cohere_client: Any | None = None
         self._sparse_model: Any | None = None
         self._init_lock = asyncio.Lock()
+        self._background_tasks: set[asyncio.Task[Any]] = set()
 
     async def close(self) -> None:
+        if self._background_tasks:
+            await asyncio.gather(*self._background_tasks, return_exceptions=True)
         if self._genai_client is not None:
             await self._genai_client.aclose()
             self._genai_client = None
@@ -135,6 +151,7 @@ class ProductionRAGChatService:
         user_id = str(current_user["_id"])
         contents = self._build_conversation_contents(payload)
         latest_user_message = payload.messages[-1].content
+        trace_group_id = str(uuid4())
 
         planning_response = await self._run_with_retries(
             lambda: self._plan_tool_call(contents=contents),
@@ -169,9 +186,9 @@ class ProductionRAGChatService:
                         "score": chunk.score,
                         "snippet": self._truncate(chunk.text, 280),
                     }
-                    for chunk in retrieval["chunks"]
+                    for chunk in retrieval.chunks
                 ],
-                "retrieved_count": len(retrieval["chunks"]),
+                "retrieved_count": len(retrieval.chunks),
                 "generated_at": datetime.now(timezone.utc).isoformat(),
             },
         }
@@ -185,7 +202,7 @@ class ProductionRAGChatService:
                     response={
                         "output": {
                             "query": retrieval_query,
-                            "context": retrieval["context"],
+                            "context": retrieval.context,
                             "citations": [
                                 {
                                     "reference_id": chunk.reference_id,
@@ -195,7 +212,7 @@ class ProductionRAGChatService:
                                     "page": chunk.page,
                                     "score": chunk.score,
                                 }
-                                for chunk in retrieval["chunks"]
+                                for chunk in retrieval.chunks
                             ],
                         }
                     },
@@ -205,6 +222,7 @@ class ProductionRAGChatService:
 
         final_contents = [*contents, tool_call_content, tool_response_content]
         final_text_parts: list[str] = []
+        client_disconnected = False
 
         stream = await self._run_with_retries(
             lambda: self._stream_grounded_answer(contents=final_contents),
@@ -214,6 +232,7 @@ class ProductionRAGChatService:
         async for chunk in stream:
             if await request.is_disconnected():
                 logger.info("Client disconnected during chat stream", extra={"user_id": user_id})
+                client_disconnected = True
                 break
             text = getattr(chunk, "text", None)
             if not text:
@@ -221,10 +240,11 @@ class ProductionRAGChatService:
             final_text_parts.append(text)
             yield {"event": "token", "data": {"text": text}}
 
+        final_answer = "".join(final_text_parts).strip()
         yield {
             "event": "done",
             "data": {
-                "text": "".join(final_text_parts).strip(),
+                "text": final_answer,
                 "citations": [
                     {
                         "reference_id": chunk.reference_id,
@@ -236,10 +256,25 @@ class ProductionRAGChatService:
                         "score": chunk.score,
                         "snippet": self._truncate(chunk.text, 280),
                     }
-                    for chunk in retrieval["chunks"]
+                    for chunk in retrieval.chunks
                 ],
             },
         }
+
+        if settings.RAG_EVAL_TRACE_ENABLED:
+            self._schedule_background_task(
+                self._persist_evaluation_traces(
+                    db=db,
+                    payload=payload,
+                    current_user=current_user,
+                    retrieval=retrieval,
+                    answer=final_answer,
+                    trace_group_id=trace_group_id,
+                    completion_status="disconnected" if client_disconnected else "completed",
+                ),
+                label="rag evaluation trace persistence",
+                extra={"user_id": user_id, "trace_group_id": trace_group_id},
+            )
 
     def _build_conversation_contents(
         self, payload: ChatStreamRequest
@@ -355,7 +390,7 @@ class ProductionRAGChatService:
         owner_user_id: ObjectId,
         document_ids: list[str] | None,
         db: Any,
-    ) -> dict[str, Any]:
+    ) -> RetrievalResult:
         allowed_document_ids = await self._resolve_authorized_document_ids(
             owner_user_id=owner_user_id,
             requested_document_ids=document_ids,
@@ -363,10 +398,14 @@ class ProductionRAGChatService:
         )
 
         if not allowed_document_ids:
-            return {
-                "context": "No indexed documents are currently available for this user.",
-                "chunks": [],
-            }
+            return RetrievalResult(
+                query=query,
+                context="No indexed documents are currently available for this user.",
+                chunks=[],
+                before_rerank_chunks=[],
+                after_rerank_chunks=[],
+                retrieval_status="no_documents",
+            )
 
         dense_task = asyncio.create_task(self._dense_embed(query))
         sparse_task = asyncio.create_task(self._sparse_embed(query))
@@ -391,10 +430,14 @@ class ProductionRAGChatService:
         final_chunks = reranked_chunks[: settings.RAG_MAX_CONTEXT_CHUNKS]
 
         if not final_chunks:
-            return {
-                "context": "No relevant indexed context was found for the request.",
-                "chunks": [],
-            }
+            return RetrievalResult(
+                query=query,
+                context="No relevant indexed context was found for the request.",
+                chunks=[],
+                before_rerank_chunks=chunks,
+                after_rerank_chunks=reranked_chunks,
+                retrieval_status="no_results",
+            )
 
         context_blocks = []
         for chunk in final_chunks:
@@ -414,10 +457,14 @@ class ProductionRAGChatService:
                 )
             )
 
-        return {
-            "context": "\n\n".join(context_blocks),
-            "chunks": final_chunks,
-        }
+        return RetrievalResult(
+            query=query,
+            context="\n\n".join(context_blocks),
+            chunks=final_chunks,
+            before_rerank_chunks=chunks,
+            after_rerank_chunks=reranked_chunks,
+            retrieval_status="completed",
+        )
 
     async def _resolve_authorized_document_ids(
         self,
@@ -670,6 +717,134 @@ class ProductionRAGChatService:
         if len(text) <= max_chars:
             return text
         return text[: max_chars - 3].rstrip() + "..."
+
+    def _schedule_background_task(
+        self,
+        coro: Awaitable[Any],
+        *,
+        label: str,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        task = asyncio.create_task(coro)
+        self._background_tasks.add(task)
+
+        def _done_callback(done_task: asyncio.Task[Any]) -> None:
+            self._background_tasks.discard(done_task)
+            if done_task.cancelled():
+                return
+            exc = done_task.exception()
+            if exc is not None:
+                logger.error(
+                    "Background task failed: %s",
+                    label,
+                    extra=extra,
+                    exc_info=exc,
+                )
+
+        task.add_done_callback(_done_callback)
+
+    async def _persist_evaluation_traces(
+        self,
+        *,
+        db: Any,
+        payload: ChatStreamRequest,
+        current_user: dict[str, Any],
+        retrieval: RetrievalResult,
+        answer: str,
+        trace_group_id: str,
+        completion_status: str,
+    ) -> None:
+        trace_docs = self._build_trace_documents(
+            payload=payload,
+            current_user=current_user,
+            retrieval=retrieval,
+            answer=answer,
+            trace_group_id=trace_group_id,
+            completion_status=completion_status,
+        )
+        if not trace_docs:
+            return
+
+        collection = db[settings.RAG_EVAL_TRACE_COLLECTION]
+        operations = [
+            UpdateOne(
+                {"trace_group_id": doc["trace_group_id"], "trace_type": doc["trace_type"]},
+                {"$setOnInsert": doc},
+                upsert=True,
+            )
+            for doc in trace_docs
+        ]
+        await collection.bulk_write(operations, ordered=False)
+
+    def _build_trace_documents(
+        self,
+        *,
+        payload: ChatStreamRequest,
+        current_user: dict[str, Any],
+        retrieval: RetrievalResult,
+        answer: str,
+        trace_group_id: str,
+        completion_status: str,
+    ) -> list[dict[str, Any]]:
+        latest_user_message = payload.messages[-1].content
+        now = datetime.now(timezone.utc)
+        base_doc = {
+            "trace_group_id": trace_group_id,
+            "request_id": request_id_var.get(),
+            "user_id": str(current_user["_id"]),
+            "document_ids": payload.document_ids or [],
+            "query": retrieval.query,
+            "latest_user_message": latest_user_message,
+            "answer": answer,
+            "reference_answer": None,
+            "retrieval_status": retrieval.retrieval_status,
+            "completion_status": completion_status,
+            "eval_status": "pending",
+            "eval_attempts": 0,
+            "created_at": now,
+            "updated_at": now,
+            "lease_expires_at": None,
+            "metrics": {},
+            "metric_errors": {},
+        }
+        before_chunks = self._serialize_trace_chunks(retrieval.before_rerank_chunks)
+        after_chunks = self._serialize_trace_chunks(retrieval.after_rerank_chunks)
+        return [
+            {
+                **base_doc,
+                "trace_type": "before_rerank",
+                "retrieved_contexts": before_chunks,
+                "retrieved_context_count": len(before_chunks),
+            },
+            {
+                **base_doc,
+                "trace_type": "after_rerank",
+                "retrieved_contexts": after_chunks,
+                "retrieved_context_count": len(after_chunks),
+            },
+        ]
+
+    def _serialize_trace_chunks(
+        self,
+        chunks: Sequence[RetrievedChunk],
+    ) -> list[dict[str, Any]]:
+        serialized: list[dict[str, Any]] = []
+        max_contexts = max(1, settings.RAG_EVAL_TRACE_MAX_CONTEXTS)
+        max_chars = max(32, settings.RAG_EVAL_TRACE_MAX_CONTEXT_CHARS)
+        for chunk in chunks[:max_contexts]:
+            serialized.append(
+                {
+                    "reference_id": chunk.reference_id,
+                    "document_id": chunk.document_id,
+                    "file_key": chunk.file_key,
+                    "title": chunk.title,
+                    "source": chunk.source,
+                    "page": chunk.page,
+                    "score": chunk.score,
+                    "text": self._truncate(chunk.text, max_chars),
+                }
+            )
+        return serialized
 
 
 rag_chat_service = ProductionRAGChatService()

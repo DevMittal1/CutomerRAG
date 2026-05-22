@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     RAG_REQUEST_TIMEOUT_SECONDS: float = Field(default=45.0)
     RAG_QDRANT_TIMEOUT_SECONDS: int = Field(default=10)
     RAG_REQUIRE_COHERE_RERANK: bool = Field(default=False)
+    RAG_EVAL_TRACE_ENABLED: bool = Field(default=True)
+    RAG_EVAL_TRACE_COLLECTION: str = Field(default="rag_evaluation_traces")
+    RAG_EVAL_TRACE_MAX_CONTEXTS: int = Field(default=12)
+    RAG_EVAL_TRACE_MAX_CONTEXT_CHARS: int = Field(default=4000)
 
     model_config = SettingsConfigDict(
         env_file=".env",
