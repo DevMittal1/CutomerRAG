@@ -221,6 +221,17 @@ The `k6/` directory contains API and stress test scripts for:
 - pre-signed URL creation
 - upload confirmation
 
+## Deployment (Docker, Kubernetes, CI/CD)
+
+Infrastructure lives under `infra/` with a root `Makefile` and GitHub Actions workflows.
+
+- **Container registry:** [GitHub Container Registry (GHCR)](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry) — `ghcr.io/devmittal1/cutomerrag-*`
+- **Build:** `make build` / `make build-api`
+- **Push:** `make release` (requires `GITHUB_TOKEN`)
+- **Kubernetes:** `make k8s-apply` (Kustomize overlay at `infra/kubernetes/overlays/prod`)
+
+See [infra/README.md](./infra/README.md) for secrets, ingress, and cluster setup.
+
 ## Architecture Doc
 
 The full end-to-end architecture README is here:

@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: cutomerrag
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - api-deployment.yaml
+  - api-service.yaml
+  - worker-deployment.yaml
+  - ingress.yaml
+
+images:
+  - name: ghcr.io/devmittal1/cutomerrag-api
+    newTag: latest
+  - name: ghcr.io/devmittal1/cutomerrag-s3-ingestion
+    newTag: latest
+  - name: ghcr.io/devmittal1/cutomerrag-local-chunk-worker
+    newTag: latest
+  - name: ghcr.io/devmittal1/cutomerrag-external-chunk-worker
+    newTag: latest
+  - name: ghcr.io/devmittal1/cutomerrag-embedding-sync-worker
+    newTag: latest
+  - name: ghcr.io/devmittal1/cutomerrag-ragas-eval-worker
+    newTag: latest
+
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize

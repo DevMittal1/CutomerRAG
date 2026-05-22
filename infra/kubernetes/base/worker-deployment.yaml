@@ -1,0 +1,214 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: s3-ingestion
+  namespace: cutomerrag
+  labels:
+    app.kubernetes.io/name: s3-ingestion
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: cutomerrag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: s3-ingestion
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: s3-ingestion
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/part-of: cutomerrag
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: s3-ingestion
+          image: ghcr.io/devmittal1/cutomerrag-s3-ingestion:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: cutomerrag-config
+            - secretRef:
+                name: cutomerrag-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: local-chunk-worker
+  namespace: cutomerrag
+  labels:
+    app.kubernetes.io/name: local-chunk-worker
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: cutomerrag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: local-chunk-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: local-chunk-worker
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/part-of: cutomerrag
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: local-chunk-worker
+          image: ghcr.io/devmittal1/cutomerrag-local-chunk-worker:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: cutomerrag-config
+            - secretRef:
+                name: cutomerrag-secrets
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: external-chunk-worker
+  namespace: cutomerrag
+  labels:
+    app.kubernetes.io/name: external-chunk-worker
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: cutomerrag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: external-chunk-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: external-chunk-worker
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/part-of: cutomerrag
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: external-chunk-worker
+          image: ghcr.io/devmittal1/cutomerrag-external-chunk-worker:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: cutomerrag-config
+            - secretRef:
+                name: cutomerrag-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embedding-sync-worker
+  namespace: cutomerrag
+  labels:
+    app.kubernetes.io/name: embedding-sync-worker
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: cutomerrag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: embedding-sync-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: embedding-sync-worker
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/part-of: cutomerrag
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: embedding-sync-worker
+          image: ghcr.io/devmittal1/cutomerrag-embedding-sync-worker:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: cutomerrag-config
+            - secretRef:
+                name: cutomerrag-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ragas-eval-worker
+  namespace: cutomerrag
+  labels:
+    app.kubernetes.io/name: ragas-eval-worker
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: cutomerrag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ragas-eval-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ragas-eval-worker
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/part-of: cutomerrag
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: ragas-eval-worker
+          image: ghcr.io/devmittal1/cutomerrag-ragas-eval-worker:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: cutomerrag-config
+            - secretRef:
+                name: cutomerrag-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi

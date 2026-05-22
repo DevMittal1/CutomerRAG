@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  # Uncomment after copying secret.example.yaml to secrets.yaml locally:
+  # - secrets.yaml
+
+patches:
+  - target:
+      kind: Deployment
+      name: api
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+
+images:
+  - name: ghcr.io/devmittal1/cutomerrag-api
+    newName: ghcr.io/devmittal1/cutomerrag-api
+    newTag: latest
+  - name: ghcr.io/devmittal1/cutomerrag-s3-ingestion
+    newName: ghcr.io/devmittal1/cutomerrag-s3-ingestion
+    newTag: latest
+  - name: ghcr.io/devmittal1/cutomerrag-local-chunk-worker
+    newName: ghcr.io/devmittal1/cutomerrag-local-chunk-worker
+    newTag: latest
+  - name: ghcr.io/devmittal1/cutomerrag-external-chunk-worker
+    newName: ghcr.io/devmittal1/cutomerrag-external-chunk-worker
+    newTag: latest
+  - name: ghcr.io/devmittal1/cutomerrag-embedding-sync-worker
+    newName: ghcr.io/devmittal1/cutomerrag-embedding-sync-worker
+    newTag: latest
+  - name: ghcr.io/devmittal1/cutomerrag-ragas-eval-worker
+    newName: ghcr.io/devmittal1/cutomerrag-ragas-eval-worker
+    newTag: latest

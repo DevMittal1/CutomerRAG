@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+**/.venv
+**/__pycache__
+**/*.py[cod]
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+graphify-out
+k6
+test.sh
+infra/kubernetes/overlays/**/secrets.yaml

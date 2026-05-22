@@ -18,3 +18,6 @@ uv.lock
 docs/
 .codex
 graphify-out/
+
+# Kubernetes secrets (never commit)
+infra/kubernetes/overlays/**/secrets.yaml
