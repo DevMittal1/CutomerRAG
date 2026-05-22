@@ -132,7 +132,76 @@ export function confirmUpload(token, documentId) {
 
   check(response, {
     'confirm upload responded with 200': (res) => res.status === 200,
-    'confirm upload sets completed status': (res) => res.json('status') === 'completed',
+    'confirm upload sets uploaded status': (res) => res.json('status') === 'uploaded',
+  });
+
+  return response;
+}
+
+/**
+ * Chronologically lists all documents owned by the user.
+ */
+export function listDocuments(token) {
+  const params = {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'X-Request-ID': `k6-list-${__VU}-${__ITER}`,
+    },
+  };
+
+  const response = http.get(`${BASE_URL}/documents/`, params);
+
+  check(response, {
+    'list documents responded with 200': (res) => res.status === 200,
+    'list documents returned array': (res) => Array.isArray(res.json()),
+  });
+
+  return response;
+}
+
+/**
+ * Regenerates an expired presigned URL for an upload.
+ */
+export function regenerateUploadUrl(token, documentId) {
+  const params = {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'X-Request-ID': `k6-regenerate-${__VU}-${__ITER}`,
+    },
+  };
+
+  const response = http.post(`${BASE_URL}/documents/${documentId}/regenerate-upload-url`, null, params);
+
+  check(response, {
+    'regenerate URL responded with 200': (res) => res.status === 200,
+    'regenerate URL contains file key': (res) => res.json('file_key') !== undefined,
+  });
+
+  return response;
+}
+
+/**
+ * Streams grounded conversational responses over Server-Sent Events (SSE).
+ */
+export function streamChat(token, messages, documentIds = null) {
+  const payload = JSON.stringify({
+    messages: messages,
+    document_ids: documentIds,
+  });
+
+  const params = {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'X-Request-ID': `k6-chat-${__VU}-${__ITER}`,
+    },
+  };
+
+  const response = http.post(`${BASE_URL}/chat/stream`, payload, params);
+
+  check(response, {
+    'chat stream responded with 200': (res) => res.status === 200,
+    'chat stream media type is text/event-stream': (res) => res.headers['Content-Type'] && res.headers['Content-Type'].includes('text/event-stream'),
   });
 
   return response;

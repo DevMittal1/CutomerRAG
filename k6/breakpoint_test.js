@@ -6,7 +6,10 @@ import {
   signinUser, 
   getUserProfile, 
   getPresignedUrl, 
-  confirmUpload 
+  listDocuments,
+  regenerateUploadUrl,
+  confirmUpload,
+  streamChat
 } from './helpers.js';
 
 // Options for Breakpoint Testing:
@@ -50,11 +53,23 @@ export default function () {
   if (presignedRes.status === 200) {
     const documentId = presignedRes.json('document_id');
     
+    // 4.1. List documents
+    listDocuments(token);
+
+    // 4.2. Regenerate S3 upload URL (simulates retry/regeneration)
+    regenerateUploadUrl(token, documentId);
+
     // Simulate upload delay
     sleep(0.1); 
     
     // 5. Confirm S3 Upload has finished
     confirmUpload(token, documentId);
+
+    // 6. Conversations chat query scoping search against the document
+    const messages = [
+      { role: 'user', content: 'What is the compliance status of this document?' }
+    ];
+    streamChat(token, messages, [documentId]);
   }
 
   sleep(0.5);

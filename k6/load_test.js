@@ -9,7 +9,10 @@ import {
   signinUser, 
   getUserProfile, 
   getPresignedUrl, 
-  confirmUpload 
+  listDocuments,
+  regenerateUploadUrl,
+  confirmUpload,
+  streamChat
 } from './helpers.js';
 
 // Define the scaling stages and rigid SLA thresholds
@@ -52,11 +55,23 @@ export default function () {
   if (presignedRes.status === 200) {
     const documentId = presignedRes.json('document_id');
     
+    // 4.1. List documents to confirm registration
+    listDocuments(token);
+
+    // 4.2. Regenerate S3 upload URL (simulates retry/regeneration)
+    regenerateUploadUrl(token, documentId);
+
     // Simulates physical network S3 upload delay (e.g. 200ms)
     sleep(0.2); 
     
     // 5. Confirm S3 Upload has finished and persist metadata
     confirmUpload(token, documentId);
+
+    // 6. Conversational chat query scoping search against the document
+    const messages = [
+      { role: 'user', content: 'What is the compliance status of this document?' }
+    ];
+    streamChat(token, messages, [documentId]);
   }
 
   // Simulate human "thinking" time between interactions

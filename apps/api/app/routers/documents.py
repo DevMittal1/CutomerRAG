@@ -17,6 +17,8 @@ from app.rate_limiter import rate_limit_dependency
 
 logger = get_logger("app.routers.documents")
 
+DOCUMENT_NOT_FOUND_MSG = "Document record not found."
+
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
 # Configure aioboto3 Session (thread-safe, non-blocking IO client)
@@ -194,7 +196,7 @@ async def confirm_upload(
     if not document:
         logger.warning(f"Confirm upload failed: Document {document_id} not found.")
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Document record not found."
+            status_code=status.HTTP_404_NOT_FOUND, detail=DOCUMENT_NOT_FOUND_MSG
         )
 
     # Security check: verify ownership
@@ -219,7 +221,7 @@ async def confirm_upload(
             if update_result is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Document record not found.",
+                    detail=DOCUMENT_NOT_FOUND_MSG,
                 )
 
         logger.info(
@@ -282,7 +284,7 @@ async def regenerate_upload_url(
     if not document:
         logger.warning(f"Regenerate upload URL failed: Document {document_id} not found.")
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Document record not found."
+            status_code=status.HTTP_404_NOT_FOUND, detail=DOCUMENT_NOT_FOUND_MSG
         )
 
     # Security check: verify ownership
