@@ -2,6 +2,106 @@
 
 Production-style Retrieval-Augmented Generation (RAG) backend for secure document upload, asynchronous parsing, chunk generation, embedding orchestration, and Qdrant vector sync.
 
+## File Structure
+
+```
+.
+├── apps
+│   ├── api
+│   │   ├── app
+│   │   │   ├── auth.py
+│   │   │   ├── config.py
+│   │   │   ├── db.py
+│   │   │   ├── __init__.py
+│   │   │   ├── logging_config.py
+│   │   │   ├── main.py
+│   │   │   ├── rate_limiter.py
+│   │   │   ├── routers
+│   │   │   ├── schemas.py
+│   │   │   └── services
+│   │   ├── main.py
+│   │   ├── pyproject.toml
+│   │   ├── ragprod.egg-info
+│   │   │   ├── dependency_links.txt
+│   │   │   ├── PKG-INFO
+│   │   │   ├── requires.txt
+│   │   │   ├── SOURCES.txt
+│   │   │   └── top_level.txt
+│   │   └── uv.lock
+│   ├── embedding_sync_worker
+│   │   ├── app
+│   │   │   ├── config.py
+│   │   │   ├── __init__.py
+│   │   │   ├── poller.py
+│   │   │   └── utils
+│   │   ├── __init__.py
+│   │   ├── main.py
+│   │   └── pyproject.toml
+│   ├── external_chunk_worker
+│   │   ├── app
+│   │   │   ├── config.py
+│   │   │   ├── embeddings.py
+│   │   │   ├── __init__.py
+│   │   │   ├── poller.py
+│   │   │   └── utils
+│   │   ├── main.py
+│   │   └── pyproject.toml
+│   ├── local_chunk_worker
+│   │   ├── app
+│   │   │   ├── config.py
+│   │   │   ├── embeddings.py
+│   │   │   ├── __init__.py
+│   │   │   └── utils
+│   │   ├── __init__.py
+│   │   ├── main.py
+│   │   └── pyproject.toml
+│   ├── ragas_eval_worker
+│   │   ├── app
+│   │   │   ├── config.py
+│   │   │   ├── __init__.py
+│   │   │   ├── poller.py
+│   │   │   └── utils
+│   │   ├── __init__.py
+│   │   ├── main.py
+│   │   ├── pyproject.toml
+│   │   └── ragas_eval_worker.egg-info
+│   │       ├── dependency_links.txt
+│   │       ├── PKG-INFO
+│   │       ├── requires.txt
+│   │       ├── SOURCES.txt
+│   │       └── top_level.txt
+│   └── s3_ingestion
+│       ├── app
+│       │   ├── config.py
+│       │   ├── processor.py
+│       │   └── utils
+│       ├── __init__.py
+│       ├── main.py
+│       └── pyproject.toml
+├── ARCHITECTURE.md
+├── docs
+│   ├── demo.docx
+│   ├── Drafting-Pleadings-and-Conveyancing.pdf
+│   └── s3upload.md
+├── graphify-out
+├── k6
+│   ├── apis
+│   │   ├── confirm.js
+│   │   ├── me.js
+│   │   ├── presigned_url.js
+│   │   ├── signin.js
+│   │   └── signup.js
+│   ├── breakpoint_test.js
+│   ├── config.js
+│   ├── helpers.js
+│   ├── load_test.js
+│   └── stress_test.js
+├── POTENTIAL_BUGS.md
+├── README.md
+├── test.sh
+└── uv.lock
+```
+
 ## Why This Project Exists
 
 CustomerRAG is built for teams that want more than a demo chatbot. It provides a practical ingestion and indexing pipeline for documents, with:
