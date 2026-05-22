@@ -109,7 +109,8 @@ jobs:
         if: secrets.KUBE_CONFIG_DATA != ''
         run: |
           TAG="${{ steps.tag.outputs.value }}"
-          OWNER="${{ github.repository_owner,, }}"
+          RAW_OWNER="${{ github.repository_owner }}"
+          OWNER="${RAW_OWNER,,}"
           OVERLAY=infra/kubernetes/overlays/prod
           cd "$OVERLAY"
           kustomize edit set image \
