@@ -1,47 +1,34 @@
 import asyncio
-import signal
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone, timedelta
 
 from llama_index.core.node_parser import HierarchicalNodeParser
 from llama_index.readers.s3 import S3Reader
 from pymongo import AsyncMongoClient, ReturnDocument
 from redis.asyncio import Redis
 
-from .app.config import settings
-from .app.embeddings import trigger_inline_batch_embeddings_async
-from .app.utils.logging import get_worker_logger, setup_worker_logging
+from ..config import settings
+from ..services.embeddings import trigger_inline_batch_embeddings_async
+from observability.logging import get_worker_logger
 
-setup_worker_logging()
-logger = get_worker_logger("rag_chunk_worker.main")
+logger = get_worker_logger("rag_chunk_worker.local")
 
-
-class ChunkWorker:
+class LocalChunkProvider:
     """
     Redis Stream consumer that owns the CPU-heavy internal chunking path.
     """
-
-    def __init__(self):
+    def __init__(self, db_client: AsyncMongoClient, redis_client: Redis):
         self.worker_id = str(uuid.uuid4())
         self.consumer_name = f"chunk-worker-{self.worker_id}"
-        self.db_client = AsyncMongoClient(settings.MONGODB_URI)
+        self.db_client = db_client
         self.db = self.db_client[settings.MONGODB_DB_NAME]
-        self.redis_client: Redis = Redis.from_url(
-            settings.REDIS_URI,
-            decode_responses=True,
-        )
+        self.redis_client = redis_client
         self.node_parser = HierarchicalNodeParser.from_defaults(
             chunk_sizes=settings.CHUNK_SIZES
         )
         self.semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_TASKS)
         self.should_exit = False
         self.active_tasks: set[asyncio.Task] = set()
-
-    async def _health_check(self):
-        await self.db_client.admin.command("ping")
-        await self.redis_client.ping()  # pyright: ignore[reportGeneralTypeIssues]
-        await self.ensure_indexes()
-        await self.ensure_consumer_group()
 
     async def ensure_indexes(self):
         await self.db[settings.COLL_DOCUMENTS].create_index("file_key", unique=True)
@@ -64,7 +51,8 @@ class ChunkWorker:
                 raise
 
     async def run(self):
-        await self._health_check()
+        await self.ensure_indexes()
+        await self.ensure_consumer_group()
         reclaim_task = asyncio.create_task(self.reclaim_loop())
         logger.info(
             "Chunk worker started",
@@ -104,9 +92,7 @@ class ChunkWorker:
             await asyncio.gather(reclaim_task, return_exceptions=True)
             if self.active_tasks:
                 await asyncio.gather(*self.active_tasks, return_exceptions=True)
-            await self.db_client.close()
-            await self.redis_client.aclose()
-            logger.info("Chunk worker shutdown complete")
+            logger.info("Chunk worker local provider run finished")
 
     async def reclaim_loop(self):
         while not self.should_exit:
@@ -336,20 +322,5 @@ class ChunkWorker:
             stream_id,
         )
 
-    def stop(self, *_args):
+    def stop(self):
         self.should_exit = True
-
-
-async def main():
-    worker = ChunkWorker()
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        try:
-            loop.add_signal_handler(sig, worker.stop)
-        except NotImplementedError:
-            logger.warning("Signal handlers are not available in this runtime")
-    await worker.run()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

@@ -3,18 +3,18 @@ name = "ragprod"
 version = "0.1.0"
 description = "Production-grade RAG platform"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 
 dependencies = [
     "bcrypt>=5.0.0",
     "pyjwt>=2.10.1",
     "cohere==5.21.1",
-    "fastembed==0.8.0",
+    "fastembed>=0.3.0",
     "fastapi>=0.136.1",
     "google-genai==2.5.0",
-    "numpy==2.4.6",
-    "qdrant-client==1.18.0",
-    "tenacity==9.1.4",
+    "numpy>=1.26.0",
+    "qdrant-client>=1.15.0",
+    "tenacity>=8.1.0",
     "uvicorn[standard]>=0.39.0",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.11.0",
@@ -25,7 +25,13 @@ dependencies = [
     "httpx[http2]>=0.28.1",
     "orjson>=3.11.0",
     "pymongo>=4.17.0",
+    "contracts",
+    "observability",
 ]
 
 [tool.uv]
 managed = true
+
+[tool.uv.sources]
+contracts = { workspace = true }
+observability = { workspace = true }

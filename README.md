@@ -48,56 +48,21 @@ High-level flow:
 
 ├── apps
 │   ├── api
-│   │   ├── app
-│   │   ├── main.py
-│   │   ├── pyproject.toml
-│   │   └── uv.lock
+│   ├── chunk_worker
 │   ├── embedding_sync_worker
-│   │   ├── app
-│   │   ├── __init__.py
-│   │   ├── main.py
-│   │   └── pyproject.toml
-│   ├── external_chunk_worker
-│   │   ├── app
-│   │   ├── main.py
-│   │   └── pyproject.toml
-│   ├── local_chunk_worker
-│   │   ├── app
-│   │   ├── __init__.py
-│   │   ├── main.py
-│   │   └── pyproject.toml
 │   ├── ragas_eval_worker
-│   │   ├── app
-│   │   ├── __init__.py
-│   │   ├── main.py
-│   │   ├── pyproject.toml
-│   │   └── ragas_eval_worker.egg-info
 │   └── s3_ingestion
-│       ├── app
-│       ├── __init__.py
-│       ├── main.py
-│       └── pyproject.toml
+├── packages
+│   ├── contracts
+│   ├── observability
+│   └── queue
+├── infra
+│   └── docker
 ├── ARCHITECTURE.md
 ├── docs
-│   ├── demo.docx
-│   ├── Drafting-Pleadings-and-Conveyancing.pdf
-│   └── s3upload.md
-├── graphify-out
 ├── k6
-│   ├── apis
-│   │   ├── confirm.js
-│   │   ├── me.js
-│   │   ├── presigned_url.js
-│   │   ├── signin.js
-│   │   └── signup.js
-│   ├── breakpoint_test.js
-│   ├── config.js
-│   ├── helpers.js
-│   ├── load_test.js
-│   └── stress_test.js
-├── POTENTIAL_BUGS.md
-├── README.md
-├── test.sh
+├── docker-compose.yml
+├── pyproject.toml
 └── uv.lock
 ```
 
@@ -121,21 +86,13 @@ SQS-driven ingestion router that:
 - claims document ownership in MongoDB
 - routes work to internal or external processing
 
-### `apps/local_chunk_worker`
+### `apps/chunk_worker`
 
-Redis Stream consumer for internal chunking. It:
+Unified daemon entry point that orchestrates internal chunking and external parsing, driven by `CHUNK_WORKER_MODE` (`local`, `external`, `both`):
 
-- reads documents from S3
-- chunks them with LlamaIndex
+- reads documents from S3 and chunks them with LlamaIndex (local mode)
+- monitors Landing AI external parse jobs (external mode)
 - stores chunks in MongoDB
-- submits embedding jobs to Gemini
-
-### `apps/external_chunk_worker`
-
-Landing AI poller that:
-
-- monitors external parse jobs
-- converts returned chunks into MongoDB records
 - submits embedding jobs to Gemini
 
 ### `apps/embedding_sync_worker`
@@ -187,18 +144,18 @@ Embedding-specific fields are tracked separately with values such as:
 - `failed`
 - `skipped`
 
-## Local Development Notes
+## How to Run This Project
 
-Each app has its own `pyproject.toml`, and the workers use environment-based settings. The main dependencies implied by the code are:
+This project uses `uv` for monorepo workspace dependency management.
 
-- Python
-- MongoDB
-- Redis
-- AWS credentials and S3/SQS setup
-- Qdrant
-- Gemini API key
-- optional RAGAS worker with Gemini API key for offline evaluation
-- optional Landing AI API key for external parsing
+1. **Install uv**: Follow the instructions at [astral.sh/uv](https://docs.astral.sh/uv/).
+2. **Sync Dependencies**: Run `uv sync` at the workspace root to resolve and install all apps and shared packages.
+3. **Configuration**: Set up your environment variables (MongoDB, Redis, AWS, Gemini, Qdrant) in the `.env` file.
+4. **Start Infrastructure**: Use Docker Compose to spin up the required datastores and services:
+   ```bash
+   docker-compose up -d
+   ```
+5. **Local Execution**: You can run individual services locally using `uv run main.py` inside each app folder. The unified chunk worker supports `CHUNK_WORKER_MODE=local`, `external`, or `both` (default) to toggle parsing paths.
 
 ## API Highlights
 

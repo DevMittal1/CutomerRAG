@@ -35,37 +35,24 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  local-chunk-worker:
+  chunk-worker:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile
       args:
-        - APP=local_chunk_worker
-    container_name: cutomerrag-local-chunk-worker
+        - APP=chunk_worker
+    container_name: cutomerrag-chunk-worker
     restart: unless-stopped
     env_file:
       - apps/.env
+    environment:
+      - CHUNK_WORKER_MODE=both
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
-  external-chunk-worker:
-    build:
-      context: .
-      dockerfile: infra/docker/Dockerfile
-      args:
-        - APP=external_chunk_worker
-    container_name: cutomerrag-external-chunk-worker
-    restart: unless-stopped
-    env_file:
-      - apps/.env
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   embedding-sync-worker:
     build:

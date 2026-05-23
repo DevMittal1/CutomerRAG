@@ -6,9 +6,9 @@ import aioboto3
 from pymongo import AsyncMongoClient
 from redis.asyncio import Redis
 
-from .app.config import settings
-from .app.processor import IngestionProcessor, heartbeat_extender
-from .app.utils.logging import get_worker_logger, setup_worker_logging
+from app.config import settings
+from app.processor import IngestionProcessor, heartbeat_extender
+from app.utils.logging import get_worker_logger, setup_worker_logging
 
 setup_worker_logging()
 logger = get_worker_logger("rag_worker.main")

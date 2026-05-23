@@ -1,35 +1,39 @@
 # Multi-service image for CustomerRAG apps.
 # Build: docker build --build-arg APP=api -f infra/docker/Dockerfile .
 #
-# APP values: api | s3_ingestion | local_chunk_worker | external_chunk_worker
+# APP values: api | s3_ingestion | chunk_worker
 #             | embedding_sync_worker | ragas_eval_worker
 
 ARG APP=api
 
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS builder
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 
 ARG APP
-WORKDIR /build
+WORKDIR /app
 
-COPY apps/${APP}/pyproject.toml apps/${APP}/uv.lock* ./
+# Copy workspace root configuration and lockfile
+COPY pyproject.toml uv.lock ./
 
+# Copy shared workspace packages required for dependency resolution
+COPY packages/ ./packages/
+
+# Copy target app configuration
+COPY apps/${APP}/pyproject.toml ./apps/${APP}/
+
+# Sync dependencies without installing the project itself
 RUN --mount=type=cache,target=/root/.cache/uv \
-    if [ -f uv.lock ]; then \
-      uv sync --frozen --no-dev --no-install-project; \
-    else \
-      uv sync --no-dev --no-install-project; \
-    fi
+    cd apps/${APP} && \
+    uv sync --frozen --no-dev --no-install-project
 
-COPY apps/${APP}/ ./
+# Copy the specific app source
+COPY apps/${APP}/ ./apps/${APP}/
 
+# Sync and install the specific app project
 RUN --mount=type=cache,target=/root/.cache/uv \
-    if [ -f uv.lock ]; then \
-      uv sync --frozen --no-dev; \
-    else \
-      uv sync --no-dev; \
-    fi
+    cd apps/${APP} && \
+    uv sync --frozen --no-dev
 
-FROM python:3.13-slim-bookworm AS runtime
+FROM docker.io/library/python:3.12-slim-bookworm AS runtime
 
 ARG APP
 ENV APP=${APP} \
@@ -43,9 +47,13 @@ WORKDIR /app
 RUN groupadd --gid 1000 app \
     && useradd --uid 1000 --gid app --create-home --shell /usr/sbin/nologin app
 
-COPY --from=builder --chown=app:app /build /app
+# Copy the built workspace (includes .venv, packages, and the specific app)
+COPY --from=builder --chown=app:app /app /app
 
 USER app
+
+# Change runtime working directory to the specific app folder
+WORKDIR /app/apps/${APP}
 
 # API binds externally in Kubernetes; workers have no HTTP port.
 HEALTHCHECK NONE

@@ -7,7 +7,8 @@ from pymongo import AsyncMongoClient, ReturnDocument
 from redis.asyncio import Redis
 
 from .config import settings
-from .utils.logging import get_worker_logger
+from rag_queue.retry import should_retry_http, get_exponential_backoff_delay
+from observability.logging import get_worker_logger
 
 logger = get_worker_logger("worker.processor")
 
@@ -52,14 +53,7 @@ class IngestionProcessor:
         attempt: int,
         max_retries: int,
     ) -> bool:
-        if attempt >= max_retries:
-            return False
-
-        if isinstance(exception, httpx.HTTPStatusError):
-            status = exception.response.status_code
-            return status == 429 or status >= 500
-
-        return isinstance(exception, (httpx.RequestError, httpx.TimeoutException))
+        return should_retry_http(exception, attempt, max_retries)
 
     def _get_retry_delay(
         self,
@@ -67,10 +61,7 @@ class IngestionProcessor:
         base_delay: float,
         max_delay: float,
     ) -> float:
-        import random
-
-        delay = min(max_delay, base_delay * (2 ** (attempt - 1)))
-        return delay * random.uniform(0.5, 1.5)
+        return get_exponential_backoff_delay(attempt, base_delay, max_delay)
 
     async def _attempt_submission(
         self,

@@ -38,7 +38,7 @@ S3 Ingestion Worker
 Redis Stream                 Landing AI Submit
   |                              |
   v                              v
-Local Chunk Worker         External Chunk Poller
+      Unified Chunk Worker (Local/External)
   |                              |
   | store chunks                 | store chunks
   | submit Gemini job            | submit Gemini job
@@ -102,38 +102,27 @@ Main files:
 - [apps/s3_ingestion/main.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/s3_ingestion/main.py)
 - [apps/s3_ingestion/app/processor.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/s3_ingestion/app/processor.py)
 
-### `apps/local_chunk_worker`
+### `apps/chunk_worker`
 
-CPU-heavy or document-processing-heavy internal chunking worker. Responsibilities:
+Unified chunking orchestrator combining both the internal LlamaIndex Redis consumer and the external Landing AI poller. Responsibilities:
 
-- consume Redis Stream messages
-- reclaim abandoned pending messages
-- claim chunking ownership in MongoDB
-- load document data from S3
-- split content with `HierarchicalNodeParser`
-- replace chunk records in MongoDB
-- submit Gemini embedding batch jobs
+- **Local Mode**: consume Redis Stream, split content with `HierarchicalNodeParser`, store chunks.
+- **External Mode**: claim and poll Landing AI jobs, process terminal states, normalize chunks into MongoDB.
+- submit Gemini embedding batch jobs (shared).
 
 Main files:
 
-- [apps/local_chunk_worker/main.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/local_chunk_worker/main.py)
-- [apps/local_chunk_worker/app/config.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/local_chunk_worker/app/config.py)
-- [apps/local_chunk_worker/app/embeddings.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/local_chunk_worker/app/embeddings.py)
+- `apps/chunk_worker/main.py`: Entry point resolving `CHUNK_WORKER_MODE` (`local`, `external`, `both`)
+- `apps/chunk_worker/app/providers/local.py`
+- `apps/chunk_worker/app/providers/external.py`
+- `apps/chunk_worker/app/services/embeddings.py`
 
-### `apps/external_chunk_worker`
+### `packages/*` (Shared Packages)
 
-Polling worker for Landing AI jobs. Responsibilities:
-
-- claim externally parsed jobs
-- poll Landing AI with adaptive backoff
-- process terminal success and failure states
-- normalize external chunks into MongoDB
-- submit Gemini embedding batch jobs
-
-Main files:
-
-- [apps/external_chunk_worker/main.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/external_chunk_worker/main.py)
-- [apps/external_chunk_worker/app/poller.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/external_chunk_worker/app/poller.py)
+Reusable internal libraries decoupled from app-specific logic:
+- `packages/contracts`: Standardized Pydantic schemas (ingestion, retrieval).
+- `packages/observability`: Correlation ID tracking and structured worker loggers.
+- `packages/queue`: Redis connection pools and HTTP retry strategies.
 
 ### `apps/embedding_sync_worker`
 

@@ -1,28 +1,14 @@
 from __future__ import annotations
 
-import logging
-from typing import Sequence, TypedDict
-
+from typing import Sequence
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
 
-logger = logging.getLogger(__name__)
+from observability.logging import get_logger
+from contracts.embeddings import InlineEmbeddingRequest
 
-
-class InlineEmbeddingPart(TypedDict):
-    text: str
-
-
-class InlineEmbeddingContent(TypedDict):
-    parts: list[InlineEmbeddingPart]
-
-
-class InlineEmbeddingRequest(TypedDict, total=False):
-    output_dimensionality: int
-    content: InlineEmbeddingContent
-    metadata: dict[str, str]
-
+logger = get_logger("chunk_worker.embeddings")
 
 async def trigger_inline_batch_embeddings_async(
     *,

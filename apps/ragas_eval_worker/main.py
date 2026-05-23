@@ -3,9 +3,9 @@ import signal
 
 from pymongo import AsyncMongoClient
 
-from .app.config import settings
-from .app.poller import RagasEvaluationPoller
-from .app.utils.logging import get_worker_logger, setup_worker_logging
+from app.config import settings
+from app.poller import RagasEvaluationPoller
+from app.utils.logging import get_worker_logger, setup_worker_logging
 
 setup_worker_logging()
 logger = get_worker_logger("ragas_eval_worker.main")
