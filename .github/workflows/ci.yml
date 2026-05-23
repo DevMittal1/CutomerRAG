@@ -39,8 +39,8 @@ jobs:
         app:
           - api
           - s3_ingestion
-          - local_chunk_worker
-          - external_chunk_worker
+          - chunk_worker
+          - embedding_sync_worker
           - embedding_sync_worker
           - ragas_eval_worker
     steps:

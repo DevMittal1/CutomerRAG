@@ -8,8 +8,7 @@ Reviewed components:
 
 - `apps/api`
 - `apps/s3_ingestion`
-- `apps/local_chunk_worker`
-- `apps/external_chunk_worker`
+- `apps/chunk_worker`
 - `apps/embedding_sync_worker`
 - `apps/ragas_eval_worker`
 
@@ -139,8 +138,8 @@ The semaphore limits active processing, but not task creation. Under sustained q
 
 **Evidence**
 
-- The reclaim loop calls `XAUTOCLAIM` with `start_id="0-0"` every cycle at [apps/local_chunk_worker/main.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/local_chunk_worker/main.py:114).
-- The returned cursor is ignored at [apps/local_chunk_worker/main.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/local_chunk_worker/main.py:122).
+- The reclaim loop calls `XAUTOCLAIM` with `start_id="0-0"` every cycle at [apps/chunk_worker/main.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/chunk_worker/main.py:114).
+- The returned cursor is ignored at [apps/chunk_worker/main.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/chunk_worker/main.py:122).
 
 **Why this is a bug**
 
@@ -164,8 +163,8 @@ The semaphore limits active processing, but not task creation. Under sustained q
 
 **Evidence**
 
-- External parser timeout is computed from `created_at` at [apps/external_chunk_worker/app/poller.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/external_chunk_worker/app/poller.py:273).
-- That timeout is enforced at [apps/external_chunk_worker/app/poller.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/external_chunk_worker/app/poller.py:345).
+- External parser timeout is computed from `created_at` at [apps/embedding_sync_worker/app/poller.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/embedding_sync_worker/app/poller.py:273).
+- That timeout is enforced at [apps/embedding_sync_worker/app/poller.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/embedding_sync_worker/app/poller.py:345).
 - Parser submission time is recorded later in the flow, not at document creation, in [apps/s3_ingestion/app/processor.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/s3_ingestion/app/processor.py:196).
 
 **Why this is a bug**
@@ -190,8 +189,8 @@ The one-hour timeout includes time spent waiting for user upload confirmation, S
 
 **Evidence**
 
-- Local chunk replacement deletes old Mongo chunks at [apps/local_chunk_worker/main.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/local_chunk_worker/main.py:242).
-- External parser replacement deletes old job chunks at [apps/external_chunk_worker/app/poller.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/external_chunk_worker/app/poller.py:126).
+- Local chunk replacement deletes old Mongo chunks at [apps/chunk_worker/main.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/chunk_worker/main.py:242).
+- External parser replacement deletes old job chunks at [apps/embedding_sync_worker/app/poller.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/embedding_sync_worker/app/poller.py:126).
 - Embedding sync only upserts new Qdrant points at [apps/embedding_sync_worker/app/poller.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/embedding_sync_worker/app/poller.py:468) and [apps/embedding_sync_worker/app/poller.py](/home/hf/Documents/rag-prod/CutomerRAG/apps/embedding_sync_worker/app/poller.py:508).
 
 **Why this is a bug**

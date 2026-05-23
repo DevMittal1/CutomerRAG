@@ -11,7 +11,7 @@ DOCKERFILE := infra/docker/Dockerfile
 DOCKER_CONTEXT := .
 K8S_OVERLAY ?= infra/kubernetes/overlays/prod
 
-APPS := api s3_ingestion local_chunk_worker external_chunk_worker embedding_sync_worker ragas_eval_worker
+APPS := api s3_ingestion chunk_worker embedding_sync_worker embedding_sync_worker ragas_eval_worker
 
 # Map app directory names to image suffixes (underscores -> hyphens).
 define image_name
