@@ -14,7 +14,7 @@ API_DOCUMENTATION.md
 PRODUCTION_REQUIREMENTS.md
 requirements.txt
 test_api.py
-uv.lock
+# uv.lock
 docs/
 .codex
 graphify-out/
