@@ -117,8 +117,7 @@ jobs:
           kustomize edit set image \
             "ghcr.io/${OWNER}/cutomerrag-api=ghcr.io/${OWNER}/cutomerrag-api:${TAG}" \
             "ghcr.io/${OWNER}/cutomerrag-s3-ingestion=ghcr.io/${OWNER}/cutomerrag-s3-ingestion:${TAG}" \
-            "ghcr.io/${OWNER}/cutomerrag-local-chunk-worker=ghcr.io/${OWNER}/cutomerrag-local-chunk-worker:${TAG}" \
-            "ghcr.io/${OWNER}/cutomerrag-external-chunk-worker=ghcr.io/${OWNER}/cutomerrag-external-chunk-worker:${TAG}" \
+            "ghcr.io/${OWNER}/cutomerrag-chunk-worker=ghcr.io/${OWNER}/cutomerrag-chunk-worker:${TAG}" \
             "ghcr.io/${OWNER}/cutomerrag-embedding-sync-worker=ghcr.io/${OWNER}/cutomerrag-embedding-sync-worker:${TAG}" \
             "ghcr.io/${OWNER}/cutomerrag-ragas-eval-worker=ghcr.io/${OWNER}/cutomerrag-ragas-eval-worker:${TAG}"
           kubectl apply -k .
