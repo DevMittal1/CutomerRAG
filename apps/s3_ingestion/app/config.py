@@ -36,7 +36,7 @@ class WorkerSettings(BaseSettings):
     LANDING_AI_BASE_URL: str = Field(default="https://api.va.landing.ai/v1/ade")
 
     model_config = SettingsConfigDict(
-        env_file=".env",  # Traverse up to the root .env
+        env_file=(".env", "apps/.env", "../.env", "../apps/.env", "../../.env"),
         env_file_encoding="utf-8",
         extra="ignore"
     )

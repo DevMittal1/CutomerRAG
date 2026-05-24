@@ -298,13 +298,13 @@ async def regenerate_upload_url(
         )
 
     # Business rule: only allow regeneration for pending uploads
-    if document["status"] == "completed":
+    if document["status"] != "pending":
         logger.warning(
-            f"Regeneration rejected: Document {document_id} is already in 'completed' status."
+            f"Regeneration rejected: Document {document_id} is already in '{document['status']}' status."
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot regenerate upload URL for a completed document. Please initiate a new document request.",
+            detail="Cannot regenerate upload URL for an already processed or uploaded document. Please initiate a new document request.",
         )
 
     # Expiration for pre-signed URL (default: 1 hour)

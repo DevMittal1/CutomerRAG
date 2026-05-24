@@ -19,6 +19,7 @@ class PresignedUrlRequest(BaseModel):
     filename: str = Field(..., min_length=1, max_length=255, description="Original name of the file")
     content_type: str = Field(..., description="Standard MIME type of the document")
     file_size_bytes: int = Field(..., gt=0, le=52428800, description="Size of the file (max 50MB)")
+    use_external_parser: bool = Field(default=False, description="Flag indicating if the document should be routed to an external layout/vision-based parser")
 
     @field_validator("content_type")
     @classmethod
@@ -60,6 +61,7 @@ class DocumentResponse(BaseModel):
     file_size_bytes: int
     created_at: datetime
     updated_at: datetime
+    use_external_parser: bool = Field(default=False, description="Whether the document was processed by an external layout/vision-based parser")
 
     class Config:
         from_attributes = True

@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     RAG_EVAL_TRACE_MAX_CONTEXT_CHARS: int = Field(default=4000)
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "apps/.env", "../.env", "../apps/.env", "../../.env"),
         env_file_encoding="utf-8",
         extra="ignore"
     )

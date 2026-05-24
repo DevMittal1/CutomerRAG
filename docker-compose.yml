@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   api:
@@ -52,7 +52,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
 
   embedding-sync-worker:
     build:

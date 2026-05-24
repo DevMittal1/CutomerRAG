@@ -18,7 +18,7 @@ class RagasEvalWorkerSettings(BaseSettings):
     RAGAS_EVAL_RUN_ONCE: bool = Field(default=False)
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "apps/.env", "../.env", "../apps/.env", "../../.env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )

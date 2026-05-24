@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 from pydantic import BeforeValidator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -32,7 +32,7 @@ class ChunkWorkerSettings(BaseSettings):
     AWS_REGION: str = Field(default="us-east-1")
 
     # LlamaIndex chunking configuration (Local path)
-    CHUNK_SIZES: Annotated[list[int], BeforeValidator(_parse_chunk_sizes)] = Field(
+    CHUNK_SIZES: Annotated[Any, BeforeValidator(_parse_chunk_sizes)] = Field(
         default_factory=lambda: [756, 324]
     )
     MAX_CONCURRENT_TASKS: int = Field(default=5)
@@ -58,7 +58,7 @@ class ChunkWorkerSettings(BaseSettings):
     CHUNK_WORKER_MODE: str = Field(default="both")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "apps/.env", "../.env", "../apps/.env", "../../.env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )

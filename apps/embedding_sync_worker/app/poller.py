@@ -69,9 +69,13 @@ class GeminiEmbeddingPoller:
             [("embedding_lock_expires_at", 1)]
         )
         await self.db[settings.COLL_CHUNKS].create_index(
-            [("document_id", 1), ("chunk_index", 1)]
+            [("document_id", 1), ("chunk_index", 1)],
+            unique=True,
         )
-        await self.db[settings.COLL_CHUNKS].create_index([("job_id", 1), ("chunk_index", 1)])
+        await self.db[settings.COLL_CHUNKS].create_index(
+            [("job_id", 1), ("chunk_index", 1)],
+            unique=True,
+        )
 
     async def ensure_qdrant_collection(self):
         collections = await self.qdrant.get_collections()
