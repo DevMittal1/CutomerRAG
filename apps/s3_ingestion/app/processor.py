@@ -200,13 +200,15 @@ class IngestionProcessor:
 
         try:
             job_id = await self.submit_to_landing_ai(content_bytes, key)
+            now = datetime.now(timezone.utc)
             await self.db[settings.COLL_DOCUMENTS].update_one(
                 doc_filter,
                 {
                     "$set": {
                         "status": "landing_ai_pending",
                         "landing_ai_job_id": job_id,
-                        "updated_at": datetime.now(timezone.utc),
+                        "landing_ai_submitted_at": now,
+                        "updated_at": now,
                     }
                 },
             )

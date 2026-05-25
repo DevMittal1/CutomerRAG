@@ -29,6 +29,7 @@ class LocalChunkProvider:
         self.semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_TASKS)
         self.should_exit = False
         self.active_tasks: set[asyncio.Task] = set()
+        self.reclaim_start_id = "0-0"
 
     async def ensure_indexes(self):
         await self.db[settings.COLL_DOCUMENTS].create_index("file_key", unique=True)
@@ -102,10 +103,11 @@ class LocalChunkProvider:
                     groupname=settings.REDIS_CHUNK_CONSUMER_GROUP,
                     consumername=self.consumer_name,
                     min_idle_time=settings.REDIS_CHUNK_RECLAIM_IDLE_MS,
-                    start_id="0-0",
+                    start_id=self.reclaim_start_id,
                     count=settings.REDIS_CHUNK_RECLAIM_BATCH_SIZE,
                 )
-                _, reclaimed_messages, *_ = result
+                next_start_id, reclaimed_messages, *_ = result
+                self.reclaim_start_id = next_start_id or "0-0"
                 for stream_id, fields in reclaimed_messages:
                     if len(self.active_tasks) >= settings.MAX_CONCURRENT_TASKS:
                         break

@@ -7,7 +7,6 @@ from fastapi.responses import StreamingResponse
 from app.auth import get_current_user
 from app.db import get_db
 from app.logging_config import get_logger
-from app.rate_limiter import rate_limit_dependency
 from app.schemas import ChatStreamRequest
 from app.services.rag_chat import rag_chat_service
 
@@ -28,7 +27,6 @@ def _sse(event: str, data: dict[str, Any]) -> bytes:
         "Authenticates the caller, retrieves authorized context from Qdrant via "
         "the RAG engine, and streams the grounded Gemini response over SSE."
     ),
-    dependencies=[Depends(rate_limit_dependency)],
 )
 async def stream_chat(
     payload: ChatStreamRequest,

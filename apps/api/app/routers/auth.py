@@ -13,7 +13,6 @@ from app.config import settings
 from app.db import get_db
 from app.logging_config import get_logger
 from app.schemas import UserResponse, UserSignIn, UserSignUp, Token
-from app.rate_limiter import rate_limit_dependency
 
 logger = get_logger("app.routers.auth")
 
@@ -24,7 +23,6 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
     "/signup",
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(rate_limit_dependency)],
     summary="Register a new user",
     description="Registers a new user in the system with credentials validation and secure password hashing.",
 )
@@ -74,7 +72,6 @@ async def signup(payload: UserSignUp, db: Annotated[Any, Depends(get_db)]):
 @router.post(
     "/signin",
     response_model=Token,
-    dependencies=[Depends(rate_limit_dependency)],
     summary="User authentication login",
     description="Authenticates credentials and returns a secure JWT access token.",
 )

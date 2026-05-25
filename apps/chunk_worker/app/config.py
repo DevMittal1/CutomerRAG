@@ -44,6 +44,7 @@ class ChunkWorkerSettings(BaseSettings):
     # Landing AI Configuration (External path)
     LANDING_AI_API_KEY: str = Field(default="")
     LANDING_AI_BASE_URL: str = Field(default="https://api.va.landing.ai/v1/ade")
+    LANDING_AI_JOB_TIMEOUT_SECONDS: int = Field(default=3600)
 
     # Gemini embedding configuration
     GOOGLE_API_KEY: str = Field(default="")

@@ -248,15 +248,16 @@ class LandingAIPoller:
             }
 
     def _check_job_timeout(self, doc: dict, job_id: str, now: datetime) -> bool:
-        created_at = doc.get("created_at")
-        if not created_at:
+        submitted_at = doc.get("landing_ai_submitted_at") or doc.get("created_at")
+        if not submitted_at:
             return False
-        if created_at.tzinfo is None:
-            created_at = created_at.replace(timezone.utc)
+        if submitted_at.tzinfo is None:
+            submitted_at = submitted_at.replace(tzinfo=timezone.utc)
         
-        age = (now - created_at).total_seconds()
-        if age > 3600:
-            logger.error(f"Job {job_id} exceeded maximum timeout of 3600 seconds. Failing.")
+        age = (now - submitted_at).total_seconds()
+        timeout = settings.LANDING_AI_JOB_TIMEOUT_SECONDS
+        if age > timeout:
+            logger.error(f"Job {job_id} exceeded maximum timeout of {timeout} seconds. Failing.")
             return True
         return False
 

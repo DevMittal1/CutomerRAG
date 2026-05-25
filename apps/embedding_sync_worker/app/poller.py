@@ -509,6 +509,25 @@ class GeminiEmbeddingPoller:
         if not points:
             raise ValueError("No embedding vectors were produced for Qdrant sync.")
 
+        # Delete any existing vectors for this document to avoid stale leftover vectors
+        try:
+            await self.qdrant.delete(
+                collection_name=settings.QDRANT_COLLECTION_NAME,
+                points_selector=models.FilterSelector(
+                    filter=models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="document_id",
+                                match=models.MatchValue(value=str(doc["_id"])),
+                            )
+                        ]
+                    )
+                ),
+            )
+            logger.info("Deleted existing Qdrant vectors for document", extra={"document_id": str(doc["_id"])})
+        except Exception as exc:
+            logger.exception("Failed to delete stale Qdrant vectors", extra={"document_id": str(doc["_id"])})
+
         await self._upsert_points(points)
         logger.info(
             "Synced embeddings to Qdrant",

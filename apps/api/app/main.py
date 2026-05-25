@@ -91,11 +91,7 @@ async def request_lifecycle_middleware(request: Request, call_next):
     is_exempt = path in exempt_paths or path.startswith((DOCS_URL, REDOC_URL))
 
     if not is_exempt:
-        x_forwarded_for = request.headers.get("X-Forwarded-For")
-        if x_forwarded_for:
-            client_ip = x_forwarded_for.split(",")[0].strip()
-        else:
-            client_ip = request.client.host if request.client else "unknown"
+        client_ip = request.client.host if request.client else "unknown"
 
         is_limited, remaining, retry_after = await global_rate_limiter.is_rate_limited(
             client_ip

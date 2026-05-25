@@ -13,7 +13,6 @@ from app.config import settings
 from app.db import get_db
 from app.logging_config import get_logger
 from app.schemas import DocumentResponse, PresignedUrlRequest, PresignedUrlResponse
-from app.rate_limiter import rate_limit_dependency
 
 logger = get_logger("app.routers.documents")
 
@@ -28,7 +27,6 @@ session = aioboto3.Session()
 @router.post(
     "/presigned-url",
     response_model=PresignedUrlResponse,
-    dependencies=[Depends(rate_limit_dependency)],
     summary="Generate S3 Pre-signed URL",
     description="Generates a secure S3 Pre-signed PUT URL for direct-to-S3 uploads, isolating paths by user ID.",
 )
@@ -251,7 +249,6 @@ async def confirm_upload(
 @router.post(
     "/{document_id}/regenerate-upload-url",
     response_model=PresignedUrlResponse,
-    dependencies=[Depends(rate_limit_dependency)],
     summary="Regenerate expired S3 pre-signed upload URL",
     description="Regenerates a fresh AWS S3 pre-signed PUT URL for an existing pending document tracking session.",
 )

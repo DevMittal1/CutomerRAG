@@ -55,9 +55,14 @@ class ProductionRAGWorker:
 
             while not self.should_exit:
                 try:
+                    slots_available = settings.MAX_CONCURRENT_TASKS - len(self.active_tasks)
+                    if slots_available <= 0:
+                        await asyncio.sleep(0.1)
+                        continue
+
                     response = await sqs.receive_message(
                         QueueUrl=settings.AWS_SQS_QUEUE_URL,
-                        MaxNumberOfMessages=min(10, settings.MAX_CONCURRENT_TASKS),
+                        MaxNumberOfMessages=min(10, slots_available),
                         WaitTimeSeconds=settings.AWS_SQS_WAIT_TIME_SECONDS,
                         AttributeNames=["All"],
                     )
