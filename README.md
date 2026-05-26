@@ -41,6 +41,276 @@ High-level flow:
 8. Embedding sync worker polls Gemini and upserts vectors into Qdrant.
 9. Chat requests can emit Mongo-backed RAG evaluation traces for offline RAGAS scoring.
 
+## System Architecture
+
+### Runtime overview
+
+```mermaid
+flowchart TB
+    subgraph clients [Clients]
+        Web[Web / mobile client]
+    end
+
+    subgraph apps [Deployable services — apps/*]
+        API[api<br/>FastAPI · JWT · SSE chat]
+        S3W[s3_ingestion<br/>SQS consumer · route internal/external]
+        CW[chunk_worker<br/>CHUNK_WORKER_MODE: local | external | both]
+        ES[embedding_sync_worker<br/>Gemini batch → Qdrant]
+        RE[ragas_eval_worker<br/>offline RAGAS on traces]
+    end
+
+    subgraph shared [Shared workspace — packages/*]
+        Contracts[contracts<br/>ingestion · retrieval schemas]
+        Obs[observability<br/>structured logging · tracing]
+        Queue[rag_queue<br/>Redis helpers · HTTP retry]
+    end
+
+    subgraph stores [Data stores]
+        Mongo[(MongoDB<br/>users · documents · chunks · traces)]
+        Redis[(Redis Streams<br/>rag:chunks)]
+        Qdrant[(Qdrant<br/>document_chunks)]
+    end
+
+    subgraph aws [AWS]
+        S3[(S3)]
+        SQS[SQS]
+    end
+
+    subgraph external [External APIs]
+        LA[Landing AI<br/>external parse jobs]
+        Gemini[Google Gemini<br/>embeddings · chat]
+        Cohere[Cohere rerank<br/>optional]
+    end
+
+    Web -->|REST + SSE /api/v1| API
+    API --> Mongo
+    API -->|presign · confirm · regenerate| S3
+    Web -->|direct PUT| S3
+
+    S3 --> SQS --> S3W
+    S3W --> Mongo
+    S3W -->|internal path| Redis
+    S3W -->|external path submit| LA
+
+    Redis --> CW
+    LA --> CW
+    CW --> S3
+    CW --> Mongo
+    CW -->|batch embed jobs| Gemini
+
+    Mongo --> ES
+    ES --> Gemini
+    ES --> Qdrant
+
+    API --> Qdrant
+    API --> Gemini
+    API --> Cohere
+    API -->|rag_evaluation_traces| Mongo
+    Mongo --> RE
+    RE --> Gemini
+    RE --> Mongo
+
+    S3W -.-> Queue
+    CW -.-> Queue
+    CW -.-> Obs
+    S3W -.-> Obs
+    API -.-> Contracts
+```
+
+### Unified chunk worker
+
+`local_chunk_worker` and `external_chunk_worker` are merged into a single `chunk_worker` process controlled by `CHUNK_WORKER_MODE`.
+
+```mermaid
+flowchart TB
+    subgraph ingestion [s3_ingestion]
+        SQS[SQS message]
+        Proc[IngestionProcessor]
+    end
+
+    subgraph chunk [apps/chunk_worker]
+        Mode{CHUNK_WORKER_MODE}
+        Local[LocalChunkProvider<br/>Redis Stream · LlamaIndex · S3 read]
+        Ext[LandingAIPoller<br/>poll external jobs]
+        Emb[embeddings service<br/>Gemini batch submit]
+    end
+
+    Mongo[(MongoDB)]
+    Redis[(Redis Stream)]
+    S3[(S3)]
+    LA[Landing AI]
+
+    SQS --> Proc
+    Proc -->|internal| Redis
+    Proc -->|external submit| LA
+
+    Mode -->|local or both| Local
+    Mode -->|external / poller / both| Ext
+
+    Redis --> Local
+    Local --> S3
+    Local --> Mongo
+    Local --> Emb
+
+    LA --> Ext
+    Ext --> Mongo
+    Ext --> Emb
+
+    Emb --> Gemini[Gemini batch API]
+```
+
+### Document lifecycle (ingestion → vectors)
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant API as api
+    participant M as MongoDB
+    participant S3 as S3
+    participant SQS as SQS
+    participant Ing as s3_ingestion
+    participant R as Redis
+    participant CW as chunk_worker
+    participant G as Gemini
+    participant ES as embedding_sync_worker
+    participant Q as Qdrant
+
+    C->>API: POST /documents/presigned-url
+    API->>M: create document record
+    API-->>C: presigned PUT URL
+    C->>S3: upload file
+    C->>API: POST /documents/{id}/confirm
+    S3->>SQS: object event
+    SQS->>Ing: consume message
+
+    alt internal route
+        Ing->>R: XADD chunk job
+        R->>CW: LocalChunkProvider
+        CW->>S3: read object
+        CW->>M: store chunks
+    else external route
+        Ing->>LA: submit parse job
+        CW->>LA: poll until done
+        CW->>M: normalize chunks
+    end
+
+    CW->>G: submit embedding batch
+    ES->>G: poll batch status
+    ES->>Q: upsert vectors
+    ES->>M: update document status
+```
+
+### RAG chat (query time)
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant API as api / rag_chat
+    participant Q as Qdrant
+    participant G as Gemini
+    participant CR as Cohere
+    participant M as MongoDB
+    participant R as ragas_eval_worker
+
+    C->>API: POST /chat/stream
+    API->>G: query embedding
+    API->>Q: dense + sparse retrieval
+    opt rerank enabled
+        API->>CR: rerank candidates
+    end
+    API->>G: stream answer SSE
+    API-->>C: tokens
+    API->>M: rag_evaluation_traces
+    Note over R,M: async, off request path
+    R->>M: lease pending traces
+    R->>G: RAGAS scoring
+    R->>M: write metrics
+```
+
+### Monorepo and build layout
+
+```mermaid
+flowchart TB
+    subgraph repo [Repository root]
+        RootPy[pyproject.toml + uv.lock<br/>Python 3.12 workspace]
+        subgraph packages [packages/*]
+            P1[contracts]
+            P2[observability]
+            P3[rag_queue]
+        end
+        subgraph apps_dir [apps/*]
+            A1[api]
+            A2[s3_ingestion]
+            A3[chunk_worker]
+            A4[embedding_sync_worker]
+            A5[ragas_eval_worker]
+        end
+        Docker[infra/docker/Dockerfile<br/>ARG APP=...]
+        Compose[docker-compose.yml]
+    end
+
+    RootPy --> packages
+    RootPy --> apps_dir
+    apps_dir --> packages
+
+    Docker -->|uv sync frozen| Image[Container image per APP]
+    Compose --> Image
+
+    subgraph cicd [CI/CD]
+        GH[GitHub Actions]
+        GHCR[GHCR cutomerrag-*]
+    end
+
+    GH --> Docker --> GHCR
+```
+
+### Local dev vs production deploy
+
+```mermaid
+flowchart LR
+    subgraph local [docker-compose.yml]
+        API_L[api :8000]
+        S3_L[s3-ingestion]
+        CW_L[chunk-worker<br/>MODE=both]
+        ES_L[embedding-sync-worker]
+        RE_L[ragas-eval-worker]
+    end
+
+    subgraph prod [Target production]
+        GHCR[GHCR images × 5]
+        K8s[Kubernetes cutomerrag namespace]
+        Ing[Ingress → api Service]
+    end
+
+    subgraph external_infra [External — you operate]
+        Mongo[(MongoDB)]
+        Redis[(Redis)]
+        Qdrant[(Qdrant)]
+        AWS[(S3 + SQS)]
+    end
+
+    API_L & S3_L & CW_L & ES_L & RE_L --> external_infra
+    GHCR --> K8s
+    Ing --> K8s
+    K8s --> external_infra
+```
+
+### API surface
+
+```mermaid
+flowchart LR
+    subgraph api [apps/api — /api/v1]
+        Auth["/auth<br/>signup · signin · me · token"]
+        Docs["/documents<br/>presigned-url · list · confirm · regenerate"]
+        Chat["/chat/stream<br/>SSE RAG"]
+        Health["/health"]
+    end
+
+    Client[Client] --> Auth
+    Client --> Docs
+    Client --> Chat
+    Client --> Health
+```
 
 ## File Structure
 
@@ -166,7 +436,9 @@ Important routes include:
 - `GET /auth/me`
 - `POST /documents/presigned-url`
 - `POST /documents/{document_id}/confirm`
+- `POST /documents/{document_id}/regenerate` (re-issue presigned URL)
 - `GET /documents/`
+- `POST /chat/stream` (SSE RAG chat)
 
 ## Load Testing
 
@@ -191,9 +463,7 @@ See [infra/README.md](./infra/README.md) for secrets, ingress, and cluster setup
 
 ## Architecture Doc
 
-The full end-to-end architecture README is here:
-
-[ARCHITECTURE.md](./ARCHITECTURE.md)
+Narrative architecture (flows, state machines, design notes) lives in [ARCHITECTURE.md](./ARCHITECTURE.md). Diagrams above are the visual companion for the current five-service layout.
 
 ## Good Fit For
 
