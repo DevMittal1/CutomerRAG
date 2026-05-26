@@ -48,27 +48,27 @@ High-level flow:
 ```mermaid
 flowchart TB
     subgraph clients [Clients]
-        Web[Web / mobile client]
+        Web["Web / mobile client"]
     end
 
-    subgraph apps [Deployable services — apps/*]
-        API[api<br/>FastAPI · JWT · SSE chat]
-        S3W[s3_ingestion<br/>SQS consumer · route internal/external]
-        CW[chunk_worker<br/>CHUNK_WORKER_MODE: local | external | both]
-        ES[embedding_sync_worker<br/>Gemini batch → Qdrant]
-        RE[ragas_eval_worker<br/>offline RAGAS on traces]
+    subgraph apps [Deployable services]
+        API["api<br/>FastAPI, JWT, SSE chat"]
+        S3W["s3_ingestion<br/>SQS consumer, routes internal or external"]
+        CW["chunk_worker<br/>CHUNK_WORKER_MODE local, external, or both"]
+        ES["embedding_sync_worker<br/>Gemini batch to Qdrant"]
+        RE["ragas_eval_worker<br/>offline RAGAS on traces"]
     end
 
-    subgraph shared [Shared workspace — packages/*]
-        Contracts[contracts<br/>ingestion · retrieval schemas]
-        Obs[observability<br/>structured logging · tracing]
-        Queue[rag_queue<br/>Redis helpers · HTTP retry]
+    subgraph shared [Shared workspace packages]
+        Contracts["contracts<br/>ingestion and retrieval schemas"]
+        Obs["observability<br/>structured logging and tracing"]
+        Queue["rag_queue<br/>Redis helpers and HTTP retry"]
     end
 
     subgraph stores [Data stores]
-        Mongo[(MongoDB<br/>users · documents · chunks · traces)]
-        Redis[(Redis Streams<br/>rag:chunks)]
-        Qdrant[(Qdrant<br/>document_chunks)]
+        Mongo[(MongoDB)]
+        Redis[(Redis Streams)]
+        Qdrant[(Qdrant)]
     end
 
     subgraph aws [AWS]
@@ -77,26 +77,26 @@ flowchart TB
     end
 
     subgraph external [External APIs]
-        LA[Landing AI<br/>external parse jobs]
-        Gemini[Google Gemini<br/>embeddings · chat]
-        Cohere[Cohere rerank<br/>optional]
+        LA["Landing AI<br/>external parse jobs"]
+        Gemini["Google Gemini<br/>embeddings and chat"]
+        Cohere["Cohere rerank optional"]
     end
 
-    Web -->|REST + SSE /api/v1| API
+    Web -->|"REST and SSE /api/v1"| API
     API --> Mongo
-    API -->|presign · confirm · regenerate| S3
-    Web -->|direct PUT| S3
+    API -->|"presign, confirm, regenerate"| S3
+    Web -->|"direct PUT"| S3
 
     S3 --> SQS --> S3W
     S3W --> Mongo
-    S3W -->|internal path| Redis
-    S3W -->|external path submit| LA
+    S3W -->|"internal path"| Redis
+    S3W -->|"external submit"| LA
 
     Redis --> CW
     LA --> CW
     CW --> S3
     CW --> Mongo
-    CW -->|batch embed jobs| Gemini
+    CW -->|"batch embed jobs"| Gemini
 
     Mongo --> ES
     ES --> Gemini
@@ -105,7 +105,7 @@ flowchart TB
     API --> Qdrant
     API --> Gemini
     API --> Cohere
-    API -->|rag_evaluation_traces| Mongo
+    API -->|"evaluation traces"| Mongo
     Mongo --> RE
     RE --> Gemini
     RE --> Mongo
@@ -128,24 +128,24 @@ flowchart TB
         Proc[IngestionProcessor]
     end
 
-    subgraph chunk [apps/chunk_worker]
+    subgraph chunk [chunk_worker]
         Mode{CHUNK_WORKER_MODE}
-        Local[LocalChunkProvider<br/>Redis Stream · LlamaIndex · S3 read]
-        Ext[LandingAIPoller<br/>poll external jobs]
-        Emb[embeddings service<br/>Gemini batch submit]
+        Local["LocalChunkProvider<br/>Redis Stream, LlamaIndex, S3 read"]
+        Ext["LandingAIPoller<br/>poll external jobs"]
+        Emb["embeddings service<br/>Gemini batch submit"]
     end
 
     Mongo[(MongoDB)]
     Redis[(Redis Stream)]
     S3[(S3)]
-    LA[Landing AI]
+    LA["Landing AI"]
 
     SQS --> Proc
-    Proc -->|internal| Redis
-    Proc -->|external submit| LA
+    Proc -->|"internal"| Redis
+    Proc -->|"external submit"| LA
 
-    Mode -->|local or both| Local
-    Mode -->|external / poller / both| Ext
+    Mode -->|"local or both"| Local
+    Mode -->|"external or both"| Ext
 
     Redis --> Local
     Local --> S3
@@ -156,7 +156,7 @@ flowchart TB
     Ext --> Mongo
     Ext --> Emb
 
-    Emb --> Gemini[Gemini batch API]
+    Emb --> GeminiBatch["Gemini batch API"]
 ```
 
 ### Document lifecycle (ingestion → vectors)
@@ -171,6 +171,7 @@ sequenceDiagram
     participant Ing as s3_ingestion
     participant R as Redis
     participant CW as chunk_worker
+    participant LA as LandingAI
     participant G as Gemini
     participant ES as embedding_sync_worker
     participant Q as Qdrant
@@ -179,7 +180,7 @@ sequenceDiagram
     API->>M: create document record
     API-->>C: presigned PUT URL
     C->>S3: upload file
-    C->>API: POST /documents/{id}/confirm
+    C->>API: POST /documents/id/confirm
     S3->>SQS: object event
     SQS->>Ing: consume message
 
@@ -205,7 +206,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant C as Client
-    participant API as api / rag_chat
+    participant API as rag_chat
     participant Q as Qdrant
     participant G as Gemini
     participant CR as Cohere
@@ -232,20 +233,20 @@ sequenceDiagram
 ```mermaid
 flowchart TB
     subgraph repo [Repository root]
-        RootPy[pyproject.toml + uv.lock<br/>Python 3.12 workspace]
-        subgraph packages [packages/*]
+        RootPy["pyproject.toml and uv.lock<br/>Python 3.12 workspace"]
+        subgraph packages [packages]
             P1[contracts]
             P2[observability]
             P3[rag_queue]
         end
-        subgraph apps_dir [apps/*]
+        subgraph apps_dir [apps]
             A1[api]
             A2[s3_ingestion]
             A3[chunk_worker]
             A4[embedding_sync_worker]
             A5[ragas_eval_worker]
         end
-        Docker[infra/docker/Dockerfile<br/>ARG APP=...]
+        Docker["infra/docker/Dockerfile<br/>build arg APP"]
         Compose[docker-compose.yml]
     end
 
@@ -253,12 +254,12 @@ flowchart TB
     RootPy --> apps_dir
     apps_dir --> packages
 
-    Docker -->|uv sync frozen| Image[Container image per APP]
+    Docker -->|"uv sync frozen"| Image["Container image per app"]
     Compose --> Image
 
     subgraph cicd [CI/CD]
         GH[GitHub Actions]
-        GHCR[GHCR cutomerrag-*]
+        GHCR["GHCR cutomerrag images"]
     end
 
     GH --> Docker --> GHCR
@@ -269,27 +270,31 @@ flowchart TB
 ```mermaid
 flowchart LR
     subgraph local [docker-compose.yml]
-        API_L[api :8000]
+        API_L["api port 8000"]
         S3_L[s3-ingestion]
-        CW_L[chunk-worker<br/>MODE=both]
+        CW_L["chunk-worker<br/>MODE both"]
         ES_L[embedding-sync-worker]
         RE_L[ragas-eval-worker]
     end
 
     subgraph prod [Target production]
-        GHCR[GHCR images × 5]
-        K8s[Kubernetes cutomerrag namespace]
-        Ing[Ingress → api Service]
+        GHCR["GHCR five images"]
+        K8s["Kubernetes cutomerrag namespace"]
+        Ing["Ingress to api Service"]
     end
 
-    subgraph external_infra [External — you operate]
+    subgraph external_infra [External you operate]
         Mongo[(MongoDB)]
         Redis[(Redis)]
         Qdrant[(Qdrant)]
-        AWS[(S3 + SQS)]
+        AWS[(S3 and SQS)]
     end
 
-    API_L & S3_L & CW_L & ES_L & RE_L --> external_infra
+    API_L --> external_infra
+    S3_L --> external_infra
+    CW_L --> external_infra
+    ES_L --> external_infra
+    RE_L --> external_infra
     GHCR --> K8s
     Ing --> K8s
     K8s --> external_infra
@@ -299,9 +304,9 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    subgraph api [apps/api — /api/v1]
-        Auth["/auth<br/>signup · signin · me · token"]
-        Docs["/documents<br/>presigned-url · list · confirm · regenerate"]
+    subgraph api_layer [api /api/v1]
+        Auth["/auth<br/>signup, signin, me, token"]
+        Docs["/documents<br/>presigned-url, list, confirm, regenerate"]
         Chat["/chat/stream<br/>SSE RAG"]
         Health["/health"]
     end
